@@ -26,6 +26,7 @@ import com.intellij.vcsUtil.VcsUtil;
 import git4idea.commands.GitCommand;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -68,7 +69,7 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
         super("GitChangeMonitor");
         running = true;
         setInterval(secs);
-        changeMap = new HashMap<VirtualFile, Set<GitVirtualFile>>();
+        changeMap = new ConcurrentHashMap<VirtualFile, Set<GitVirtualFile>>();
 
     }
 
@@ -148,7 +149,7 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
      *
      * @param root The top level directory to monitor
      */
-    public synchronized void addRoot(VirtualFile root) {
+    public void addRoot(VirtualFile root) {
         if (changeMap.containsKey(root))
             return;
         Set<GitVirtualFile> files = new HashSet<GitVirtualFile>();
@@ -160,7 +161,7 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
      *
      * @param root The top level directory to no longer monitor
      */
-    public synchronized void deleteRoot(VirtualFile root) {
+    public void deleteRoot(VirtualFile root) {
         changeMap.remove(root);
     }
 
@@ -178,7 +179,7 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
     /**
      * Check to see what files have changed under the monitored content roots.
      */
-    private synchronized void check() {
+    private void check() {
         Set<VirtualFile> roots = changeMap.keySet();
         for (VirtualFile root : roots) {
             GitCommand cmd = new GitCommand(project, settings, root);
