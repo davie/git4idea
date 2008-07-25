@@ -22,7 +22,10 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.openapi.roots.ModuleRootListener;
 import com.intellij.openapi.roots.ModuleRootEvent;
+import com.intellij.openapi.application.RuntimeInterruptedException;
 import com.intellij.vcsUtil.VcsUtil;
+import com.intellij.util.messages.MessageBusConnection;
+import com.intellij.ProjectTopics;
 import git4idea.commands.GitCommand;
 
 import java.util.*;
@@ -42,6 +45,7 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
     private GitVcsSettings settings;
     private Project project;
     private ChangeListManager changeListManager;
+    private MessageBusConnection msgBus;
 
 
     public static synchronized GitChangeMonitor getInstance() {
@@ -70,7 +74,6 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
         running = true;
         setInterval(secs);
         changeMap = new ConcurrentHashMap<VirtualFile, Set<GitVirtualFile>>();
-
     }
 
     /**
@@ -78,8 +81,11 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
      */
     public void stopRunning() {
         running = false;
+        if(msgBus != null) {
+            msgBus.disconnect();
+            msgBus = null;
+        }
         changeMap.clear();
-        ProjectRootManager.getInstance(project).removeModuleRootListener(this);
         interrupt();
     }
 
@@ -101,12 +107,13 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
      */
     public void setProject(Project proj) {
         project = proj;
-        ProjectRootManager pMgr = ProjectRootManager.getInstance(project);
-        pMgr.removeModuleRootListener(this);
-        for (VirtualFile root : pMgr.getContentRoots()) {
+        if(msgBus != null)
+            msgBus.disconnect();
+        changeMap.clear();
+        for (VirtualFile root : ProjectRootManager.getInstance(project).getContentRoots())
             addRoot(root);
-        }
-        pMgr.addModuleRootListener(this);
+        msgBus = project.getMessageBus().connect();
+        msgBus.subscribe(ProjectTopics.PROJECT_ROOTS, this);
         changeListManager = ChangeListManager.getInstance(project);
     }
 
@@ -129,7 +136,10 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
     @SuppressWarnings({"EmptyCatchBlock"})
     public void run() {
         while (running) {
-            check();
+            try {
+                check();
+            }catch(RuntimeInterruptedException e) {
+            }
             try {
                 sleep(interval);
             } catch (InterruptedException e) {
@@ -209,9 +219,8 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
 
     public void rootsChanged(ModuleRootEvent event) {
         changeMap.clear();
-        for (VirtualFile root : ProjectRootManager.getInstance(project).getContentRoots()) {
+        for (VirtualFile root : ProjectRootManager.getInstance(project).getContentRoots())
             addRoot(root);
-        }
         refresh();
     }
 
@@ -219,7 +228,7 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
         Collection<Change> changes = new ArrayList<Change>();
         for (GitVirtualFile file : files) {
             FilePath path = VcsUtil.getFilePath(file.getPath());
-            VirtualFile vfile = VcsUtil.getVirtualFile(file.getPath());
+            //VirtualFile vfile = VcsUtil.getVirtualFile(file.getPath());
             ContentRevision beforeRev = null;
             if (file != null)
                 beforeRev = new GitContentRevision(path, new GitRevisionNumber(GitRevisionNumber.TIP, new Date(file.getModificationStamp())), project);
