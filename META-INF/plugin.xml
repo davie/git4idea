@@ -2,7 +2,7 @@
 <idea-plugin>
     <name>Git4Idea</name>
     <description>Provides basic Git version control support for IDEA</description>
-    <version>1.0</version>
+    <version>1.1</version>
     <vendor url="http://github.com/markscott/git4idea/tree/master" email="mscott@mqsoftware.com">MQSoftware</vendor>
     <idea-version since-build="5000"/>
     <application-components>
