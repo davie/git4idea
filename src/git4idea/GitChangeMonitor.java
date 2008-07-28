@@ -71,7 +71,6 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
      */
     private GitChangeMonitor(int secs) {
         super("GitChangeMonitor");
-        running = true;
         setInterval(secs);
         changeMap = new ConcurrentHashMap<VirtualFile, Set<GitVirtualFile>>();
     }
@@ -130,7 +129,10 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
     public synchronized void start() {
         if (project == null || settings == null)
             throw new IllegalStateException("Project & VCS settings not set!");
-        super.start();
+        if(!running) {
+            running = true;
+            super.start();
+        }
     }
 
     @SuppressWarnings({"EmptyCatchBlock"})
