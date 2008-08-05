@@ -20,9 +20,9 @@
             <reference id="CheckinFiles"/>
             <!-- <reference id="CheckinProject"/>      -->
             <!-- <reference id="UpdateFiles"/>
+            <reference id="Compare.SameVersion"/>      -->
             <reference id="IntegrateFiles"/>
             <reference id="Annotate"/>
-            <reference id="Compare.SameVersion"/> -->
             <reference id="Compare.LastVersion"/>
             <reference id="Compare.Selected"/>
             <reference id="Vcs.ShowTabbedFileHistory"/>
@@ -66,6 +66,9 @@
     <extensions xmlns="com.intellij" defaultExtensionNs="com.intellij">
         <vcs name="Git" vcsClass="git4idea.GitVcs"/>
 
+        <projectService
+                serviceInterface="git4idea.GitAnnotationProvider"
+                serviceImplementation="git4idea.GitAnnotationProvider"/>
         <projectService
                 serviceInterface="git4idea.GitDiffProvider"
                 serviceImplementation="git4idea.GitDiffProvider"/>

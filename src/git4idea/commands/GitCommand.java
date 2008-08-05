@@ -30,6 +30,7 @@ import org.jetbrains.annotations.NotNull;
 import java.io.*;
 import java.util.*;
 import java.text.SimpleDateFormat;
+import java.text.ParseException;
 
 import git4idea.*;
 
@@ -281,7 +282,7 @@ public class GitCommand {
             revCmd.append(HEAD + ":");
         }
 
-        String vcsPath = revCmd.append(getRelativeFilePath(path, vcsRoot)).toString();
+        String vcsPath = "'" + revCmd.append(getRelativeFilePath(path, vcsRoot)).toString() + "'";
         return execute(SHOW_CMD, Collections.singletonList(vcsPath), true);
     }
 
@@ -680,6 +681,61 @@ public class GitCommand {
         if (proc.exitValue() != 0)
             throw new VcsException("Error executing gitk!");
     }
+
+    /**
+     * Builds the annotation for the specified file.
+     *
+     * @param filePath The path to the file.
+     * @return The GitFileAnnotation.
+     * @throws com.intellij.openapi.vcs.VcsException If it fails...
+     */
+      public GitFileAnnotation annotate(FilePath filePath) throws VcsException {
+         String[] options = new String[]{"-l", "--"};
+
+         String[] args = new String[]{getRelativeFilePath(filePath.getPath(), vcsRoot)};
+
+         String cmdOutput = execute("annotate", options, args);
+         BufferedReader in = new BufferedReader(new StringReader(cmdOutput));
+         GitFileAnnotation annotation = new GitFileAnnotation(project);
+
+         SimpleDateFormat dateFormat = new SimpleDateFormat("yyy-MM-dd HH:mm:ss Z");
+
+         String Line;
+         try {
+            while ((Line = in.readLine()) != null) {
+               String annValues[] = Line.split("\t", 4);
+               if (annValues.length != 4) {
+                  throw new VcsException("Framing error: unexpected number of values");
+               }
+
+               String revision = annValues[0];
+               String user = annValues[1];
+               String dateStr = annValues[2];
+               String numberedLine = annValues[3];
+
+               if (revision.length() != 40) {
+                  throw new VcsException("Framing error: Illegal revision number: " + revision);
+               }
+
+               int idx = numberedLine.indexOf(')');
+               if (!user.startsWith("(") || idx <= 0) {
+                  throw new VcsException("Framing error: unexpected format");
+               }
+               user = user.substring(1).trim(); // Ditch the (
+               Long lineNumber = Long.valueOf(numberedLine.substring(0, idx));
+               String lineContents = numberedLine.substring(idx + 1);
+
+               Date date = dateFormat.parse(dateStr);
+               annotation.appendLineInfo(date, new GitRevisionNumber(revision, date), user, lineContents, lineNumber);
+            }
+
+         } catch (IOException e) {
+            throw new VcsException("Failed to load annotations", e);
+         } catch (ParseException e) {
+            throw new VcsException("Failed to load annotations", e);
+         }
+         return annotation;
+      }
 
     /////////////////////////////////////////////////////////////////////////////////////////////
     // Private worker & helper methods

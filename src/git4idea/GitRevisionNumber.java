@@ -58,6 +58,16 @@ public class GitRevisionNumber implements VcsRevisionNumber {
         return revisionStr;
     }
 
+    public String getShortRev() {
+        if(revisionStr == null || revisionStr.length() == 0)
+            return "";
+        if(revisionStr.length() == 40)
+            return revisionStr.substring(0, 8);
+        if(revisionStr.length() > 40)  // revision string encoded with date too
+            return revisionStr.substring(revisionStr.indexOf("[") + 1, 8);
+        return revisionStr;
+    } 
+
     @Override
     public int compareTo(VcsRevisionNumber crev) {
         if (this == crev) return 0;

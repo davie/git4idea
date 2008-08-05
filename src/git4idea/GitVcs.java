@@ -28,6 +28,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.vcs.*;
+import com.intellij.openapi.vcs.annotate.AnnotationProvider;
 import com.intellij.openapi.vcs.update.UpdateEnvironment;
 import com.intellij.openapi.vcs.changes.*;
 import com.intellij.openapi.vcs.checkin.CheckinEnvironment;
@@ -57,6 +58,7 @@ public class GitVcs extends AbstractVcs implements Disposable {
     private RollbackEnvironment rollbackEnvironment;
     private GitUpdateEnvironment updateEnvironment;
 
+    private GitAnnotationProvider annotationProvider;    
     private DiffProvider diffProvider;
     private VcsHistoryProvider historyProvider;
     private GitChangeListListener changeListListener;
@@ -77,6 +79,7 @@ public class GitVcs extends AbstractVcs implements Disposable {
             @NotNull final GitChangeProvider gitChangeProvider,
             @NotNull final GitCheckinEnvironment gitCheckinEnvironment,
             @NotNull final ProjectLevelVcsManager gitVcsManager,
+            @NotNull final GitAnnotationProvider gitAnnotationProvider,            
             @NotNull final GitDiffProvider gitDiffProvider,
             @NotNull final GitHistoryProvider gitHistoryProvider,
             @NotNull final GitRollbackEnvironment gitRollbackEnvironment,
@@ -89,6 +92,7 @@ public class GitVcs extends AbstractVcs implements Disposable {
         delConfirmation = gitVcsManager.getStandardConfirmation(VcsConfiguration.StandardConfirmation.REMOVE, this);
         changeProvider = gitChangeProvider;
         checkinEnvironment = gitCheckinEnvironment;
+        annotationProvider = gitAnnotationProvider;        
         diffProvider = gitDiffProvider;
         editorColorsScheme = EditorColorsManager.getInstance().getGlobalScheme();
         historyProvider = gitHistoryProvider;
@@ -143,6 +147,12 @@ public class GitVcs extends AbstractVcs implements Disposable {
         return getUpdateEnvironment();
     }
 
+    @Override
+    @NotNull
+    public GitAnnotationProvider getAnnotationProvider() {
+        return annotationProvider;
+    }
+    
     @Override
     @NotNull
     public DiffProvider getDiffProvider() {

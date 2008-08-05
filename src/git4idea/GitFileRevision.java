@@ -45,7 +45,7 @@ public class GitFileRevision implements VcsFileRevision,Comparable<VcsFileRevisi
             @NotNull Project project,
             @NotNull FilePath path,
             @NotNull GitRevisionNumber revision,
-            @NotNull String author,
+            @Nullable String author,
             @Nullable String message,
             @Nullable String branch) {
         this.project = project;
