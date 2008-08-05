@@ -20,8 +20,8 @@
             <reference id="CheckinFiles"/>
             <!-- <reference id="CheckinProject"/>      -->
             <!-- <reference id="UpdateFiles"/>
-            <reference id="Compare.SameVersion"/>      -->
-            <reference id="IntegrateFiles"/>
+            <reference id="Compare.SameVersion"/>
+            <reference id="IntegrateFiles"/>  -->
             <reference id="Annotate"/>
             <reference id="Compare.LastVersion"/>
             <reference id="Compare.Selected"/>

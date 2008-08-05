@@ -42,7 +42,7 @@ public class GitUtil {
     public static VirtualFile getVcsRoot(@NotNull final Project project, final VirtualFile virtualFile) {
         VirtualFile vfile = VcsUtil.getVcsRootFor(project, virtualFile);
         if (vfile == null)
-            vfile = GitFileSystem.getInstance().findFileByPath(project, virtualFile.getPath());
+            vfile = project.getBaseDir();
         return vfile;
     }
 

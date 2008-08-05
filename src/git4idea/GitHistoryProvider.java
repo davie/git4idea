@@ -53,7 +53,7 @@ public class GitHistoryProvider implements VcsHistoryProvider {
 
     @Override
     public boolean isDateOmittable() {
-        return true;
+        return false;
     }
 
     @Override

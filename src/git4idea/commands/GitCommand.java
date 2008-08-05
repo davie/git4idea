@@ -314,12 +314,13 @@ public class GitCommand {
         // Pull the result apart...
         BufferedReader in = new BufferedReader(new StringReader(result));
         String line;
-        SimpleDateFormat df = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
+        //SimpleDateFormat df = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
         try {
             while ((line = in.readLine()) != null) {
                 String[] values = line.split("@@@");
                 Date commitDate = new Date(Long.valueOf(values[2]) * 1000);
-                String revstr = df.format(commitDate) + " [" + values[0] + "]";
+                //String revstr = df.format(commitDate) + " [" + values[0] + "]";
+                String revstr = values[0];
                 GitFileRevision revision = new GitFileRevision(
                         project,
                         filePath,
@@ -654,11 +655,18 @@ public class GitCommand {
      * @throws VcsException if an error occurs
      */
     public void revisionGraph(VirtualFile file) throws VcsException {
-        String basePath = new File(settings.GIT_EXECUTABLE).getParent();
-        // TODO: should probably allow the user to configure wish/gitk this in the plugin config
-        String sep = System.getProperty("file.separator", "\\");
-        String wishcmd = basePath + sep + "wish84";
-        String gitkcmd = basePath + sep + "gitk";
+        String wishcmd;
+        String gitkcmd;
+        File gitExec = new File(settings.GIT_EXECUTABLE);
+        if(gitExec.exists()) {  // use absolute path if we can
+            String sep = System.getProperty("file.separator", "\\");
+            wishcmd = gitExec.getParent() + sep + "wish84";
+            gitkcmd = gitExec.getParent() + sep + "gitk";
+        } else {    // otherwise, assume user has $PATH setup
+            wishcmd = "wish84";
+            gitkcmd = "gitk";
+        }
+
         String filename = getRelativeFilePath(file, vcsRoot);
 
         Process proc;
@@ -698,7 +706,7 @@ public class GitCommand {
          BufferedReader in = new BufferedReader(new StringReader(cmdOutput));
          GitFileAnnotation annotation = new GitFileAnnotation(project);
 
-         SimpleDateFormat dateFormat = new SimpleDateFormat("yyy-MM-dd HH:mm:ss Z");
+         SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z");
 
          String Line;
          try {
