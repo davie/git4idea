@@ -17,8 +17,8 @@
         </action>
         <group id="Git.Menu" class="git4idea.actions.GitMenu" popup="true" text="Git">
             <reference id="CheckinFiles"/>
-            <!-- <reference id="CheckinProject"/>      -->
-            <!-- <reference id="UpdateFiles"/>
+            <!-- <reference id="CheckinProject"/>
+            <reference id="UpdateFiles"/>
             <reference id="Compare.SameVersion"/>
             <reference id="IntegrateFiles"/>  -->
             <reference id="Annotate"/>
