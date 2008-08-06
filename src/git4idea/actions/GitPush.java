@@ -49,12 +49,12 @@ public class GitPush extends BasicAction {
             cmdr.setArgs(new String[] { "--mirror" });
 
             ProgressManager manager = ProgressManager.getInstance();
-            //TODO: make this async so the git command output can be seen in the version control window as it happens...
-            manager.runProcessWithProgressSynchronously(cmdr, "Pushing all commited changes to remote repos", false, project);
+            manager.runProcessWithProgressSynchronously(cmdr, "Pushing all commited changes, refs & tags to remote repos",
+                    false, project);
 
             VcsException ex = cmdr.getException();
             if(ex != null)  {
-                Messages.showErrorDialog(project, ex.getMessage(), "Error occurred during 'git push'");
+                Messages.showErrorDialog(project, ex.getMessage(), "Error occurred during 'git push --mirror'");
             }
         }
     }

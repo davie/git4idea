@@ -60,12 +60,19 @@ public class GitPull extends BasicAction {
             cmdr.setArgs(new String[] { repoURL });
 
             ProgressManager manager = ProgressManager.getInstance();
-            //TODO: make this async so the git command output can be seen in the version control window as it happens...
             manager.runProcessWithProgressSynchronously(cmdr, "Fetching from " + repoURL, false, project);
 
             VcsException ex = cmdr.getException();
             if(ex != null)  {
                 Messages.showErrorDialog(project, ex.getMessage(), "Error occurred during 'git fetch'");
+                return;
+            }
+
+            cmdr.setArgs(new String[] { "--tags", repoURL });
+            manager.runProcessWithProgressSynchronously(cmdr, "Updating tags from " + repoURL, false, project);
+            ex = cmdr.getException();
+            if(ex != null)  {
+                Messages.showErrorDialog(project, ex.getMessage(), "Error occurred during 'git fetch --tags'");
                 return;
             }
 

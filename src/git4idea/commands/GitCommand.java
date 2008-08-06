@@ -537,7 +537,9 @@ public class GitCommand {
         else
             cmd = FETCH_CMD;
 
-        String result = execute(cmd, null, repoURL);
+        String result = execute(cmd, repoURL);
+        GitVcs.getInstance(project).showMessages(result);
+        result = execute(cmd, "--tags", repoURL);
         GitVcs.getInstance(project).showMessages(result);
     }
 
@@ -547,10 +549,9 @@ public class GitCommand {
      * @throws VcsException If an error occurs
      */
     public void push() throws VcsException {
-        ArrayList<String> args = new ArrayList<String>();
-        args.add("--tags");
-
-        String result = execute(PUSH_CMD, args);
+        String result = execute(PUSH_CMD);
+        GitVcs.getInstance(project).showMessages(result);
+        result = execute(PUSH_CMD, "--tags");
         GitVcs.getInstance(project).showMessages(result);
     }
 
