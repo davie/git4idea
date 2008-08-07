@@ -1,5 +1,16 @@
 package git4idea;
-
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance
+ * with the License. You may obtain a copy of the License at:
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
+ * the specific language governing permissions and limitations under the License.
+ *
+ * Author: Anatol Pomozov (Copyright 2008)
+ */
 import com.intellij.openapi.editor.EditorGutterAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.VcsException;
@@ -16,21 +27,10 @@ import java.text.*;
 import java.awt.*;
 
 /**
-* GitAnnotationProvider.
-* Based on the JetBrains SVNAnnotationProvider.
-*
-* @author Anatol Pomozov
-* <p/>
-* <p/>
-* Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-* <p/>
-* http://www.apache.org/licenses/LICENSE-2.0
-* <p/>
-* Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an
-* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-* specific language governing permissions and limitations under the License.
-*/
+ * Git file annotation implementation
+ * 
+ * Based on the JetBrains SVNAnnotationProvider.
+ */
 public class GitFileAnnotation implements FileAnnotation {
   private final StringBuffer myContentBuffer = new StringBuffer();
   private final List<LineInfo> myLineInfos = new ArrayList<LineInfo>();
@@ -156,14 +156,16 @@ public class GitFileAnnotation implements FileAnnotation {
      }
 
      public void doAction(int lineNum) {
-        if (lineNum >= 0 && lineNum < myLineInfos.size()) {
-           final LineInfo info = myLineInfos.get(lineNum);
-           VcsFileRevision fileRevision = myRevisionMap.get(info.getRevision());
-           if (fileRevision != null) {
-              System.out.println("GitFileAnnotation$RevisionAnnotationAspect.doAction");
-//TODO? ShowAllSubmittedFilesAction.showSubmittedFiles(project, fileRevision);
-           }
-        }
+         //TODO: none of this does anything useful... What's the point?
+
+        //if (lineNum >= 0 && lineNum < myLineInfos.size()) {
+           //final LineInfo info = myLineInfos.get(lineNum);
+           //VcsFileRevision fileRevision = myRevisionMap.get(info.getRevision());
+           //if (fileRevision != null) {
+             // System.out.println("GitFileAnnotation$RevisionAnnotationAspect.doAction");
+            //TODO? ShowAllSubmittedFilesAction.showSubmittedFiles(project, fileRevision);
+           //}
+        //}
      }
   }
 
