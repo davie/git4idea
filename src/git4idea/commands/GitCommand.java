@@ -39,7 +39,7 @@ import git4idea.*;
  */
 @SuppressWarnings({"ResultOfMethodCallIgnored"})
 public class GitCommand {
-    public final static boolean DEBUG = true;
+    public final static boolean DEBUG = false;
     public static final int BUF_SIZE = 64 * 16;  // 16KB
 
     /* Git/VCS commands */
@@ -282,7 +282,7 @@ public class GitCommand {
             revCmd.append(HEAD + ":");
         }
 
-        String vcsPath = "'" + revCmd.append(getRelativeFilePath(path, vcsRoot)).toString() + "'";
+        String vcsPath = "\"" + revCmd.append(getRelativeFilePath(path, vcsRoot)).toString() + "\"";
         return execute(SHOW_CMD, Collections.singletonList(vcsPath), true);
     }
 
@@ -821,22 +821,28 @@ public class GitCommand {
         if (cmdArgs != null)
             cmdLine.addAll(cmdArgs);
 
-        if (!silent) {
-            String cmdStr = StringUtil.join(cmdLine, " ");
-            GitVcs.getInstance(project).showMessages("git" + cmdStr.substring(settings.GIT_EXECUTABLE.length()));
+        File directory = VfsUtil.virtualToIoFile(vcsRoot);
+
+        String cmdStr = null;
+        if(DEBUG) {
+            cmdStr = StringUtil.join(cmdLine, " ");
+            GitVcs.getInstance(project).showMessages("DEBUG: work-dir: [" + directory.getAbsolutePath() + "]" +
+                    " exec: [" + cmdStr + "]");
         }
 
-        File directory = VfsUtil.virtualToIoFile(vcsRoot);
+        if (!silent && !DEBUG) { // dont' print twice in DEBUG mode
+            if(cmdStr == null)
+                cmdStr = StringUtil.join(cmdLine, " ");
+            GitVcs.getInstance(project).showMessages("git" + cmdStr.substring(settings.GIT_EXECUTABLE.length()));
+        }
 
         try {
             ProcessBuilder pb = new ProcessBuilder(cmdLine);
             // copy IDEA configured env into process exec env
             Map<String, String> pbenv = pb.environment();
             pbenv.putAll(EnvironmentUtil.getEnviromentProperties());
-
             pb.directory(directory);
             pb.redirectErrorStream(true);
-
             Process proc = pb.start();
 
             // Get the output from the process.
