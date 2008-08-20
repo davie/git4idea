@@ -282,7 +282,8 @@ public class GitCommand {
             revCmd.append(HEAD + ":");
         }
 
-        String vcsPath = "\"" + revCmd.append(getRelativeFilePath(path, vcsRoot)).toString() + "\"";
+        String vcsPath = revCmd.append(getRelativeFilePath(path, vcsRoot)).toString();
+        vcsPath = vcsPath.replace("\\", "\\\\");
         return execute(SHOW_CMD, Collections.singletonList(vcsPath), true);
     }
 
