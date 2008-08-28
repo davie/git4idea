@@ -30,6 +30,8 @@ import git4idea.commands.GitCommand;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -46,20 +48,31 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
     private Project project;
     private ChangeListManager changeListManager;
     private MessageBusConnection msgBus;
+    private static final Lock threadLock = new ReentrantLock();
 
 
-    public static synchronized GitChangeMonitor getInstance() {
-        if (monitor == null) {
-            monitor = new GitChangeMonitor(DEF_INTERVAL_SECS);
+    public static GitChangeMonitor getInstance() {
+        threadLock.lock();
+        try {
+            if (monitor == null) {
+                monitor = new GitChangeMonitor(DEF_INTERVAL_SECS);
+            }
+        } finally {
+            threadLock.unlock();
         }
         return monitor;
     }
 
-    public static synchronized GitChangeMonitor getInstance(int secs) {
-        if (monitor == null) {
-            monitor = new GitChangeMonitor(secs);
-        } else {
-            monitor.setInterval(secs);
+    public static GitChangeMonitor getInstance(int secs) {
+        threadLock.lock();
+        try {
+            if (monitor == null) {
+                monitor = new GitChangeMonitor(secs);
+            } else {
+                monitor.setInterval(secs);
+            }
+        } finally {
+            threadLock.unlock();
         }
         return monitor;
     }
@@ -79,13 +92,18 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
      * Halt the change monitor
      */
     public void stopRunning() {
-        running = false;
-        if(msgBus != null) {
-            msgBus.disconnect();
-            msgBus = null;
+        threadLock.lock();
+        try {
+            running = false;
+            if(msgBus != null) {
+                msgBus.disconnect();
+                msgBus = null;
+            }
+            changeMap.clear();
+            interrupt();
+        }finally {
+            threadLock.unlock();
         }
-        changeMap.clear();
-        interrupt();
     }
 
     /**
@@ -105,15 +123,20 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
      * @param proj The project to asssociate with
      */
     public void setProject(Project proj) {
-        project = proj;
-        if(msgBus != null)
-            msgBus.disconnect();
-        changeMap.clear();
-        for (VirtualFile root : ProjectRootManager.getInstance(project).getContentRoots())
-            addRoot(root);
-        msgBus = project.getMessageBus().connect();
-        msgBus.subscribe(ProjectTopics.PROJECT_ROOTS, this);
-        changeListManager = ChangeListManager.getInstance(project);
+        threadLock.lock();
+        try {
+            project = proj;
+            if(msgBus != null)
+                msgBus.disconnect();
+            changeMap.clear();
+            for (VirtualFile root : ProjectRootManager.getInstance(project).getContentRoots())
+                addRoot(root);
+            msgBus = project.getMessageBus().connect();
+            msgBus.subscribe(ProjectTopics.PROJECT_ROOTS, this);
+            changeListManager = ChangeListManager.getInstance(project);
+        } finally {
+            threadLock.unlock();
+        }
     }
 
     /**
@@ -126,12 +149,17 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
         setInterval(settings.GIT_INTERVAL);
     }
 
-    public synchronized void start() {
-        if (project == null || settings == null)
-            throw new IllegalStateException("Project & VCS settings not set!");
-        if(!running) {
-            running = true;
-            super.start();
+    public void start() {
+        threadLock.lock();
+        try {
+            if (project == null || settings == null)
+                throw new IllegalStateException("Project & VCS settings not set!");
+            if(!running) {
+                running = true;
+                super.start();
+            }
+        } finally {
+            threadLock.unlock();
         }
     }
 
