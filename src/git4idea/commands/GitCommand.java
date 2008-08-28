@@ -382,8 +382,8 @@ public class GitCommand {
         String[] args = new String[files.length];
         int count = 0;
         for (VirtualFile file : files) {
-            args[count] = getRelativeFilePath(file, vcsRoot);
-            count++;
+            if(file != null)
+                args[count++] = getRelativeFilePath(file, vcsRoot);
         }
 
         String result = execute(ADD_CMD, (String[]) null, args);
@@ -444,7 +444,8 @@ public class GitCommand {
         String[] opts = {"-f"};
         int count = 0;
         for (VirtualFile file : files) {
-            args[count++] = getRelativeFilePath(file, vcsRoot);
+            if(file != null)
+                args[count++] = getRelativeFilePath(file, vcsRoot);
         }
 
         String result = execute(DELETE_CMD, opts, args);
@@ -567,8 +568,8 @@ public class GitCommand {
         String[] options = new String[]{HEAD, "--"};
         int count = 0;
         for (VirtualFile file : files) {
-            args[count] = getRelativeFilePath(file, vcsRoot);
-            count++;
+            if(file != null)
+                args[count++] = getRelativeFilePath(file, vcsRoot);
         }
 
         String result = execute(REVERT_CMD, options, args);
@@ -752,10 +753,12 @@ public class GitCommand {
     ////////////////////////////////////////////////////////////////////////////////////////////
 
     public String getRelativeFilePath(VirtualFile file, @NotNull final VirtualFile baseDir) {
+        if(file == null) return null;
         return getRelativeFilePath(file.getPath(), baseDir);
     }
 
     public String getRelativeFilePath(String file, @NotNull final VirtualFile baseDir) {
+        if(file == null) return null;
         final String basePath = baseDir.getPath();
         if (!file.startsWith(basePath)) return file;
         else if (file.equals(basePath)) return ".";
