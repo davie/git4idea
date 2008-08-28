@@ -423,8 +423,8 @@ public class GitCommand {
         String[] args = new String[files.length];
         int count = 0;
         for (VirtualFile file : files) {
-            args[count] = getRelativeFilePath(file, vcsRoot);
-            count++;
+            if(file != null)
+                args[count++] = getRelativeFilePath(file, vcsRoot);
         }
 
         add(files); // add current snapshot to index first..
