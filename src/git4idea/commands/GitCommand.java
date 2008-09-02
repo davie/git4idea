@@ -822,8 +822,12 @@ public class GitCommand {
         List<String> cmdLine = new ArrayList<String>();
         cmdLine.add(settings.GIT_EXECUTABLE);
         cmdLine.add(cmd);
-        if (cmdArgs != null)
-            cmdLine.addAll(cmdArgs);
+        if (cmdArgs != null) {
+            for(String arg: cmdArgs) {
+                if(arg != null)
+                    cmdLine.add(arg);
+            }
+        }
 
         File directory = VfsUtil.virtualToIoFile(vcsRoot);
 
