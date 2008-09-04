@@ -55,6 +55,7 @@ public class GitCommand {
     private static final String GC_CMD = "gc";
     private static final String LOG_CMD = "log";
     public static final String MERGE_CMD = "merge";
+    public static final String MOVE_CMD = "mv";
     public static final String PULL_CMD = "pull";
     public static final String PUSH_CMD = "push";
     private static final String REBASE_CMD = "rebase";
@@ -495,6 +496,19 @@ public class GitCommand {
     }
 
     /**
+     * Move/rename a file
+     *
+     * @throws VcsException If an error occurs
+     */
+    public void move(String oldFile, String newFile) throws VcsException {
+        if( oldFile == null || newFile == null || oldFile.length() == 0 || newFile.length() == 0)
+            throw new VcsException("Cannot move empty path element(s)!");
+        String [] files = new String[] { getRelativeFilePath(oldFile, vcsRoot), getRelativeFilePath(newFile, vcsRoot) };
+        String result = execute(MOVE_CMD, files, false);
+        GitVcs.getInstance(project).showMessages(result);
+    }
+
+    /**
      * Cleanup indexes & garbage collect repository
      *
      * @throws VcsException If an error occurs
@@ -794,10 +808,16 @@ public class GitCommand {
     private String execute(String cmd, String[] options, String[] args) throws VcsException {
         List<String> cmdLine = new ArrayList<String>();
         if (options != null) {
-            cmdLine.addAll(Arrays.asList(options));
+            for(String opt: options) {
+                if(opt != null)
+                    cmdLine.add(opt);
+            }
         }
         if (args != null) {
-            cmdLine.addAll(Arrays.asList(args));
+            for(String arg: args) {
+                if(arg != null)
+                    cmdLine.add(arg);
+            }
         }
         return execute(cmd, cmdLine);
     }

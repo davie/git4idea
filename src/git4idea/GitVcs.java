@@ -39,6 +39,7 @@ import com.intellij.openapi.vcs.history.VcsRevisionNumber;
 import com.intellij.openapi.vcs.rollback.RollbackEnvironment;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
+import com.intellij.refactoring.listeners.RefactoringListenerManager;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -69,6 +70,7 @@ public class GitVcs extends AbstractVcs implements Disposable {
     private EditorColorsScheme editorColorsScheme;
     private Configurable configurable;
     private RevisionSelector revSelector;
+    private GitRefactoringListenerProvider refactorListener;
 
     public static GitVcs getInstance(@NotNull Project project) {
         return (GitVcs) ProjectLevelVcsManager.getInstance(project).findVcsByName(GIT);
@@ -104,6 +106,9 @@ public class GitVcs extends AbstractVcs implements Disposable {
 
         ((GitCheckinEnvironment) checkinEnvironment).setProject(myProject);
         ((GitCheckinEnvironment) checkinEnvironment).setSettings(settings);
+
+        refactorListener = new GitRefactoringListenerProvider();
+
     }
 
     @Override
@@ -209,6 +214,7 @@ public class GitVcs extends AbstractVcs implements Disposable {
         VirtualFileManager.getInstance().addVirtualFileListener(
                 new GitVirtualFileAdaptor(this, myProject),
                 activationDisposable);
+        RefactoringListenerManager.getInstance(myProject).addListenerProvider(refactorListener);
         GitChangeMonitor mon = GitChangeMonitor.getInstance(settings.GIT_INTERVAL);
         mon.setProject(myProject);
         mon.setGitVcsSettings(settings);
@@ -219,6 +225,7 @@ public class GitVcs extends AbstractVcs implements Disposable {
     public void deactivate() {
         super.deactivate();
 
+        RefactoringListenerManager.getInstance(myProject).removeListenerProvider(refactorListener);
         assert activationDisposable != null;
         Disposer.dispose(activationDisposable);
         activationDisposable = null;
