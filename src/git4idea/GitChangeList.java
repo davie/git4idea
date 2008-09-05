@@ -27,6 +27,8 @@ public class GitChangeList extends LocalChangeList {
     private String name;
     private String comment;
     private Collection<Change> changes;
+    private boolean isdefault = true;
+    private boolean isreadonly = false;
 
     public GitChangeList(@NotNull String name, String comment, Collection<Change> changes) {
         super();
@@ -53,7 +55,7 @@ public class GitChangeList extends LocalChangeList {
     }
 
     public boolean isDefault() {
-        return true;
+        return isdefault;
     }
 
     public boolean isInUpdate() {
@@ -61,14 +63,24 @@ public class GitChangeList extends LocalChangeList {
     }
 
     public boolean isReadOnly() {
-        return true;
+        return isreadonly;
+    }
+
+    public void setDefault(boolean isDefault) {
+        isdefault = isDefault;
     }
 
     public void setReadOnly(boolean isReadOnly) {
+        isreadonly = isReadOnly;
     }
 
     public Collection<Change> getChanges() {
         return changes;
+    }
+
+    public void setChanges(Collection<Change> newChanges) {
+        if(!isreadonly)
+            changes = newChanges;
     }
 
     public LocalChangeList clone() {

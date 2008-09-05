@@ -18,6 +18,7 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiFile;
 import com.intellij.refactoring.listeners.RefactoringElementListener;
 import git4idea.commands.GitCommand;
 
@@ -50,11 +51,17 @@ public class GitRenameListener implements RefactoringElementListener {
             Messages.showErrorDialog(project, se.getMessage(), "Unable to move file, permission denied.");
         } catch (VcsException ve) {
             Messages.showErrorDialog(project, ve.getMessage(), "Error during 'git mv'");
-            oldLoc.renameTo(newLoc);
         }
     }
 
     public void elementMoved(PsiElement newElement) {
+        PsiFile pfile = (PsiFile) newElement;
+        PsiFile ofile = pfile.getOriginalFile();
+         
+        pfile.getName();
+
+        VirtualFile newFile = newElement.getContainingFile().getVirtualFile();
+        newFile.getPath();
         // not implemented due to IDEA bug(?) - doesn't pass any info about old element to listener provider
     }
 

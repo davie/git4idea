@@ -12,7 +12,6 @@ package git4idea;
  * Copyright 2008 MQSoftware
  * Authors: Mark Scott
  */
-
 import com.intellij.refactoring.listeners.RefactoringElementListenerProvider;
 import com.intellij.refactoring.listeners.RefactoringElementListener;
 import com.intellij.psi.PsiElement;
@@ -33,9 +32,6 @@ public class GitRefactoringListenerProvider implements RefactoringElementListene
         if (!(element instanceof PsiFile)) return null;
         PsiFile pFile = (PsiFile)element;
         VirtualFile vFile = pFile.getVirtualFile();
-        
         return new GitRenameListener(vFile.getPath(), element);
     }
-
-    
 }

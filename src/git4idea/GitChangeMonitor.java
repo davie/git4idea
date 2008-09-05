@@ -84,6 +84,7 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
      */
     private GitChangeMonitor(int secs) {
         super("GitChangeMonitor");
+        setDaemon(true);
         setInterval(secs);
         changeMap = new ConcurrentHashMap<VirtualFile, Set<GitVirtualFile>>();
     }
@@ -95,13 +96,13 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
         threadLock.lock();
         try {
             running = false;
-            if(msgBus != null) {
+            if (msgBus != null) {
                 msgBus.disconnect();
                 msgBus = null;
             }
             changeMap.clear();
             interrupt();
-        }finally {
+        } finally {
             threadLock.unlock();
         }
     }
@@ -126,7 +127,7 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
         threadLock.lock();
         try {
             project = proj;
-            if(msgBus != null)
+            if (msgBus != null)
                 msgBus.disconnect();
             changeMap.clear();
             for (VirtualFile root : ProjectRootManager.getInstance(project).getContentRoots())
@@ -154,7 +155,7 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
         try {
             if (project == null || settings == null)
                 throw new IllegalStateException("Project & VCS settings not set!");
-            if(!running) {
+            if (!running) {
                 running = true;
                 super.start();
             }
@@ -168,7 +169,7 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
         while (running) {
             try {
                 check();
-            }catch(RuntimeInterruptedException e) {
+            } catch (RuntimeInterruptedException e) {
             }
             try {
                 sleep(interval);
@@ -229,14 +230,29 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
                     changeMap.remove(root);
                 } else {
                     changeMap.put(root, changedFiles);
-                    LocalChangeList uncommitted = changeListManager.findChangeList("All Uncommited Changes");
-                    if(uncommitted == null) {
-                        uncommitted = changeListManager.addChangeList("All Uncommited Changes","");
+                    Change[] allGitChanges = getChanges(changedFiles);
+                    for (Change gitChange : allGitChanges) { // go through every change Git finds & see if in
+                        // a changelist already, if not put in default changelist
+                        boolean matched = false;
+                        for (LocalChangeList list : changeListManager.getChangeLists()) {
+                            for (Change change : list.getChanges()) {
+                                if (gitChange.equals(change)) {
+                                    if(gitChange.getType() == change.getType()) {
+                                        matched = true;    // don't match if status/type is different
+                                    }
+                                    break;
+                                }
+                            }
+                            if(matched) break;
+                        }
+                        if (!matched) {
+                            LocalChangeList gitList = changeListManager.getDefaultChangeList();
+                            if(gitList.isReadOnly())
+                                gitList.setReadOnly(false);
+                            changeListManager.moveChangesTo(gitList, new Change[] { gitChange} );
+                        }
                     }
-
-                    changeListManager.moveChangesTo(uncommitted, getChanges(changedFiles));
-                    changeListManager.setDefaultChangeList(uncommitted);
-                    changeListManager.scheduleUpdate();
+                    changeListManager.scheduleUpdate(true);
                 }
             } catch (VcsException e) {
                 e.printStackTrace();
@@ -289,6 +305,6 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
             }
         }
 
-        return changes.toArray(new Change[ changes.size() ]);
+        return changes.toArray(new Change[changes.size()]);
     }
 }

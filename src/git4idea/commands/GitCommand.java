@@ -21,6 +21,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.VcsException;
+import com.intellij.openapi.vcs.changes.VcsDirtyScopeManager;
 import com.intellij.openapi.vcs.history.VcsFileRevision;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -432,6 +433,14 @@ public class GitCommand {
         String result = execute(COMMIT_CMD, options, args);  // now commit the files
         GitVcs.getInstance(project).showMessages(result);
         GitChangeMonitor.getInstance().refresh();
+
+        VcsDirtyScopeManager mgr = VcsDirtyScopeManager.getInstance(project);
+        for (VirtualFile file : files) {
+            if(file != null) {
+                mgr.fileDirty(file);
+                file.refresh(true, true);
+            }
+        }
     }
 
     /**
