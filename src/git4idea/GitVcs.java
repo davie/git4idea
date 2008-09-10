@@ -245,7 +245,7 @@ public class GitVcs extends AbstractVcs implements Disposable {
 
     @NotNull
     @Override
-    public synchronized Configurable getConfigurable() {
+    public Configurable getConfigurable() {
         return configurable;
     }
 
@@ -287,5 +287,9 @@ public class GitVcs extends AbstractVcs implements Disposable {
 
     public void dispose() {
         assert activationDisposable == null;
+    }
+
+    GitVirtualFileAdaptor getFileAdapter() {
+        return gitFileAdapter;
     }
 }

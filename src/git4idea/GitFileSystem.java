@@ -41,7 +41,7 @@ public class GitFileSystem extends VcsFileSystem {
     // per project, store a cache map of path->vfile mappings
     private Map<Project, Map<String, VirtualFile>> projects = new HashMap<Project, Map<String, VirtualFile>>();
 
-    public static synchronized GitFileSystem getInstance() {
+    public static GitFileSystem getInstance() {
         return gitfs;
     }
 

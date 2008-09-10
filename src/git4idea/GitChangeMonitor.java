@@ -255,7 +255,8 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
         } finally {
             threadLock.unlock();
         }
-        changeListManager.scheduleUpdate();
+        
+      changeListManager.scheduleUpdate();
     }
 
     public void beforeRootsChange(ModuleRootEvent event) {     // unused

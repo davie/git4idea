@@ -26,7 +26,6 @@ import com.intellij.openapi.vcs.history.VcsFileRevision;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.EnvironmentUtil;
-import com.intellij.vcsUtil.VcsUtil;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.*;
@@ -67,6 +66,7 @@ public class GitCommand {
     private static final String VERSION_CMD = "version";
     public static final String STASH_CMD = "stash";
     public static final String MERGETOOL_CMD = "mergetool";
+    public static final String STATUS_CMD = "status";
 
     /* Misc Git constants */
     private static final String HEAD = "HEAD";
@@ -223,7 +223,7 @@ public class GitCommand {
      */
     public Set<VirtualFile> changedFiles() throws VcsException {
         Set<VirtualFile> files = new HashSet<VirtualFile>();
-        String output = null;
+        String output;
         List<String> args = new ArrayList<String>();
         args.add("--cached");
         args.add("--name-status");
@@ -519,6 +519,8 @@ public class GitCommand {
     /**
      * Move/rename a file
      *
+     * @param oldFile the old file path
+     * @param newFile the new file path
      * @throws VcsException If an error occurs
      */
     public void move(@NotNull VirtualFile oldFile, @NotNull VirtualFile newFile) throws VcsException {
@@ -672,8 +674,25 @@ public class GitCommand {
     }
 
     /**
+     * Return true if the specified file is known to Git, otherwise false.
+     *
+     * @param file the file to check status of
+     * @throws VcsException If an error occurs
+     * @return true if Git owns the file, else false
+     */
+    public boolean status(VirtualFile file) throws VcsException {
+        try {
+            execute(STATUS_CMD, getRelativeFilePath(file, GitUtil.getVcsRoot(project, file)));
+            return true;
+        } catch(VcsException e) {
+            return false;
+        }
+    }
+
+    /**
      * Exec the git merge tool
      *
+     * @param files The files to merge
      * @throws VcsException If an error occurs
      */
     public void mergetool(String[] files) throws VcsException {

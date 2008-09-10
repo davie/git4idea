@@ -16,25 +16,40 @@ package git4idea;
  *
  * This code was originally derived from the MKS & Mercurial IDEA VCS plugins
  */
-import git4idea.commands.GitCommand;
+
 import com.intellij.openapi.actionSystem.AnAction;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.progress.ProgressIndicator;
+import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vcs.changes.CurrentContentRevision;
-import com.intellij.openapi.vcs.history.*;
+import com.intellij.openapi.vcs.history.FileHistoryPanel;
+import com.intellij.openapi.vcs.history.HistoryAsTreeProvider;
+import com.intellij.openapi.vcs.history.VcsFileRevision;
+import com.intellij.openapi.vcs.history.VcsHistoryProvider;
+import com.intellij.openapi.vcs.history.VcsHistorySession;
+import com.intellij.openapi.vcs.history.VcsRevisionNumber;
 import com.intellij.util.ui.ColumnInfo;
-import org.jetbrains.annotations.Nullable;
+import com.intellij.vcsUtil.VcsUtil;
+import git4idea.commands.GitCommand;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Git history provider implementation
  */
 public class GitHistoryProvider implements VcsHistoryProvider {
-    private final Project project;
-    private final GitVcsSettings settings;
+    private final
+    @NotNull
+    Project project;
+    private final
+    @NotNull
+    GitVcsSettings settings;
 
     public GitHistoryProvider(@NotNull Project project, @NotNull GitVcsSettings settings) {
         this.project = project;
@@ -48,7 +63,7 @@ public class GitHistoryProvider implements VcsHistoryProvider {
 
     @Override
     public AnAction[] getAdditionalActions(FileHistoryPanel panel) {
-        return new AnAction[0];  
+        return new AnAction[0];
     }
 
     @Override
@@ -62,17 +77,44 @@ public class GitHistoryProvider implements VcsHistoryProvider {
         return null;
     }
 
+    @SuppressWarnings({"unchecked"})
     @Override
     @Nullable
-    public VcsHistorySession createSessionFor(FilePath filePath) throws VcsException {
-        GitCommand command = new GitCommand(project, settings, GitUtil.getVcsRoot(project, filePath));
-        List<VcsFileRevision> revisions = command.log(filePath);
-        final FilePath path = filePath;
+    public VcsHistorySession createSessionFor(final FilePath filePath) throws VcsException {
+        final List<VcsFileRevision> revisions = new ArrayList<VcsFileRevision>(25);
+        final VcsException[] exception = new VcsException[1];
+
+        Runnable command = new Runnable() {
+            public void run() {
+                final ProgressIndicator progress = ProgressManager.getInstance().getProgressIndicator();
+                progress.setIndeterminate(true);
+
+                GitCommand gc = new GitCommand(project, settings, GitUtil.getVcsRoot(project, filePath));
+                progress.setText2("Retrieving commit history for: " +
+                        gc.getRelativeFilePath(filePath.getVirtualFile(),GitUtil.getVcsRoot(project, filePath)));
+                try {
+                    List<VcsFileRevision> revs = gc.log(filePath);
+                    if (revs != null && revs.size() > 0)
+                        revisions.addAll(revs);
+                } catch (VcsException e) {
+                    exception[0] = e;
+                }
+            }
+        };
+
+        if (ApplicationManager.getApplication().isDispatchThread()) {
+            ProgressManager.getInstance().runProcessWithProgressSynchronously(command, "Commit History", false, project);
+        } else {
+            command.run();
+        }
+
+        if (exception[0] != null)
+            throw exception[0];
 
         return new VcsHistorySession(revisions) {
             @Nullable
             protected VcsRevisionNumber calcCurrentRevisionNumber() {
-                return CurrentContentRevision.create(path).getRevisionNumber();
+                return CurrentContentRevision.create(filePath).getRevisionNumber();
             }
         };
     }

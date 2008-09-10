@@ -17,22 +17,31 @@ package git4idea;
  * This code was originally derived from the MKS & Mercurial IDEA VCS plugins
  */
 
-import git4idea.commands.GitCommand;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.AbstractVcsHelper;
 import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vcs.VcsShowConfirmationOption;
 import com.intellij.openapi.vcs.changes.VcsDirtyScopeManager;
-import com.intellij.openapi.vfs.*;
+import com.intellij.openapi.vfs.LocalFileOperationsHandler;
+import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.VirtualFileAdapter;
+import com.intellij.openapi.vfs.VirtualFileCopyEvent;
+import com.intellij.openapi.vfs.VirtualFileEvent;
+import com.intellij.openapi.vfs.VirtualFileMoveEvent;
+import com.intellij.openapi.vfs.VirtualFilePropertyEvent;
 import com.intellij.vcsUtil.VcsUtil;
+import com.intellij.vcsUtil.VcsRunnable;
+import git4idea.commands.GitCommand;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
-import java.io.IOException;
-import java.io.File;
+import java.util.Set;
 
 /**
  * Git virtual file adapter
@@ -43,9 +52,11 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
     private static final String ADD_TITLE = "Add file";
     private static final String ADD_MESSAGE = "Add file(s) to Git?\n{0}";
     private static final String DEL_TITLE = "Delete file";
-    private static final String DEL_MESSAGE = "Delete file(s) from Git?\n{0}";
+    private static final String DEL_MESSAGE = "Delete file(s) in Git?\n{0}";
     // always keep git index in sync with file changes (do "git add" on every file save)
     private boolean doChangeSync = true;
+    private Set<VirtualFile> ignoreFiles = new HashSet<VirtualFile>();
+    private Set<VirtualFile> knownFiles = new HashSet<VirtualFile>();
 
     public GitVirtualFileAdaptor(@NotNull GitVcs vcs, @NotNull Project project) {
         this.vcs = vcs;
@@ -54,6 +65,27 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
 
     @Override
     public void beforeContentsChange(@NotNull VirtualFileEvent event) {
+//        final VirtualFile file = event.getFile();
+//        if (!isFileProcessable(file) || knownFile(file))
+//            return;
+//
+//        VcsRunnable cmd = new VcsRunnable() {
+//            public void run() throws VcsException {
+//                VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
+//                if(vcsRoot == null) return;
+//                GitCommand gc = new GitCommand(project, vcs.getSettings(), vcsRoot);
+//                    if (!gc.status(file)) {
+//                        ignoreFile(file, true);
+//                    } else {
+//                        ignoreFile(file, false);
+//                    }
+//            }
+//        };
+//
+//        try {
+//            VcsUtil.runVcsProcessWithProgress(cmd, "Checking Git file status", false, project);
+//        } catch (VcsException e) {
+//        }
     }
 
     @Override
@@ -77,7 +109,7 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
             GitVcs.getInstance(project).showErrors(es, "Error syncing changes to Git index!");
         }
         statusChange(file);
-        GitChangeMonitor.getInstance().refresh();
+        //GitChangeMonitor.getInstance().refresh();
     }
 
     @Override
@@ -105,6 +137,13 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
                 break;
             case DO_NOTHING_SILENTLY:
                 return;
+        }
+
+        if (filesToAdd == null || filesToAdd.size() == 0) {
+            ignoreFile(file, true);
+            return;
+        } else {
+            ignoreFile(file, false);
         }
 
         VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
@@ -250,6 +289,19 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
         return false;  //To change body of implemented methods use File | Settings | File Templates.
     }
 
+    public void ignoreFile(@NotNull VirtualFile file, boolean ignoreMe) {
+        if (ignoreMe)
+            ignoreFiles.add(file);
+        else {
+            ignoreFiles.remove(file);
+            knownFiles.add(file);
+        }
+    }
+
+    public boolean knownFile(@NotNull VirtualFile file) {
+        return knownFiles.contains(file);
+    }
+
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Private methods
 
@@ -261,7 +313,9 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
      * @return Returns true of the file can be added.
      */
     private boolean isFileProcessable(VirtualFile file) {
-        return VcsUtil.isFileForVcs(file, project, vcs) && !file.getName().contains(".git");
+        if (file.isDirectory() && file.getName().contains(".git")) return false;
+        return VcsUtil.isFileForVcs(file, project, vcs) && !file.getPath().contains(".git/")
+                && !ignoreFiles.contains(file);
     }
 
     private void statusChange(@NotNull VirtualFile file) {

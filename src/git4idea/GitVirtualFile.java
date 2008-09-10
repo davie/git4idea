@@ -58,7 +58,7 @@ public class GitVirtualFile extends VirtualFile {
     @Override
     @NotNull
     public String getName() {
-        return path.substring(path.lastIndexOf(File.separatorChar));
+        return path.substring(path.lastIndexOf("/"));
     }
 
     @Override
@@ -163,10 +163,15 @@ public class GitVirtualFile extends VirtualFile {
     public boolean equals(Object obj) {
         if (!(obj instanceof GitVirtualFile))
             return false;
-        
+
         GitVirtualFile that = (GitVirtualFile) obj;
+        if(that.project != project) return false;
         return path.equals(that.path) && file.equals(that.file)
                 && project.equals(that.project) && status.equals(that.status);
+    }
+
+    public int hashCode() {
+        return path.hashCode();
     }
 
     public String toString() {

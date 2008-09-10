@@ -82,7 +82,7 @@ public class GitFileRevision implements VcsFileRevision,Comparable<VcsFileRevisi
     }
 
     @Override
-    public synchronized void loadContent() throws VcsException {
+    public void loadContent() throws VcsException {
         GitCommand command = new GitCommand(project, GitVcsSettings.getInstance(project), GitUtil.getVcsRoot(project, path));
         String c = command.getContents(path.getPath(), revision.getRev());
         if (c != null && c.length() > 0) {
