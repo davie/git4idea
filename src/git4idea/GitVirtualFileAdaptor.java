@@ -16,43 +16,68 @@ package git4idea;
  *
  * This code was originally derived from the MKS & Mercurial IDEA VCS plugins
  */
+
 import git4idea.commands.GitCommand;
-import com.intellij.openapi.fileTypes.FileTypeManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.AbstractVcsHelper;
 import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vcs.VcsShowConfirmationOption;
+import com.intellij.openapi.vcs.changes.VcsDirtyScopeManager;
 import com.intellij.openapi.vfs.*;
 import com.intellij.vcsUtil.VcsUtil;
-import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.io.IOException;
+import java.io.File;
 
 /**
  * Git virtual file adapter
  */
-public class GitVirtualFileAdaptor extends VirtualFileAdapter {
+public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFileOperationsHandler {
     private Project project;
-    private GitVcs host;
-    private static final String TITLE = "Add file(s)";
-    private static final String MESSAGE = "Add files to Git?\n{0}";
+    private GitVcs vcs;
+    private static final String ADD_TITLE = "Add file";
+    private static final String ADD_MESSAGE = "Add file(s) to Git?\n{0}";
+    private static final String DEL_TITLE = "Delete file";
+    private static final String DEL_MESSAGE = "Delete file(s) from Git?\n{0}";
+    // always keep git index in sync with file changes (do "git add" on every file save)
+    private boolean doChangeSync = true;
 
-    public GitVirtualFileAdaptor(@NotNull GitVcs host, @NotNull Project project) {
-        this.host = host;
+    public GitVirtualFileAdaptor(@NotNull GitVcs vcs, @NotNull Project project) {
+        this.vcs = vcs;
         this.project = project;
     }
 
     @Override
-    public void propertyChanged(@NotNull VirtualFilePropertyEvent event) {
-        super.propertyChanged(event);    //To change body of overridden methods use File | Settings | File Templates.
+    public void beforeContentsChange(@NotNull VirtualFileEvent event) {
     }
 
     @Override
-    public void contentsChanged(@NotNull VirtualFileEvent event) {
-        super.contentsChanged(event);    //To change body of overridden methods use File | Settings | File Templates.
+    //TODO: add user config option for "Always keep Git index in sync ("git add") with every file save?"
+    public void contentsChanged(@NotNull VirtualFileEvent event) {  // keep Git repo in sync
+        if (!doChangeSync || event.isFromRefresh())
+            return;
+
+        final VirtualFile file = event.getFile();
+        if (!isFileProcessable(file))
+            return;
+
+        VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
+        GitCommand command = new GitCommand(project, vcs.getSettings(), vcsRoot);
+        try {
+            command.add(new VirtualFile[]{event.getFile()});
+        }
+        catch (VcsException e) {
+            List<VcsException> es = new ArrayList<VcsException>();
+            es.add(e);
+            GitVcs.getInstance(project).showErrors(es, "Error syncing changes to Git index!");
+        }
+        statusChange(file);
+        GitChangeMonitor.getInstance().refresh();
     }
 
     @Override
@@ -61,106 +86,172 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter {
             return;
 
         final VirtualFile file = event.getFile();
+        if (!isFileProcessable(file))
+            return;
 
-        if (isFileProcessable(file)) {
-            VcsShowConfirmationOption option = host.getAddConfirmation();
-            if (option.getValue() == VcsShowConfirmationOption.Value.SHOW_CONFIRMATION) {
-                List<VirtualFile> files = new ArrayList<VirtualFile>();
-                files.add(file);
+        List<VirtualFile> files = new ArrayList<VirtualFile>();
+        files.add(file);
+        Collection<VirtualFile> filesToAdd = new ArrayList<VirtualFile>(1);
+        VcsShowConfirmationOption option = vcs.getAddConfirmation();
+        VcsShowConfirmationOption.Value userOpt = option.getValue();
 
+        switch (userOpt) {
+            case SHOW_CONFIRMATION:
                 AbstractVcsHelper helper = AbstractVcsHelper.getInstance(project);
-                Collection<VirtualFile> filesToAdd = helper.selectFilesToProcess(files, TITLE, null, TITLE, MESSAGE, option);
+                filesToAdd = helper.selectFilesToProcess(files, ADD_TITLE, null, ADD_TITLE, ADD_MESSAGE, option);
+                break;
+            case DO_ACTION_SILENTLY:
+                filesToAdd.add(file);
+                break;
+            case DO_NOTHING_SILENTLY:
+                return;
+        }
 
-                VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
-                if (filesToAdd != null && vcsRoot != null) {
-                    GitCommand command = new GitCommand(project, host.getSettings(), vcsRoot);
-                    try {
-                        command.add(filesToAdd.toArray(new VirtualFile[filesToAdd.size()]));
-                    }
-                    catch (VcsException e) {
-                        List<VcsException> es = new ArrayList<VcsException>();
-                        es.add(e);
-                        GitVcs.getInstance(project).showErrors(es, "Changes");
-                    }
-                }
+        VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
+        if (filesToAdd != null && filesToAdd.size() > 0 && vcsRoot != null) {
+            GitCommand command = new GitCommand(project, vcs.getSettings(), vcsRoot);
+            try {
+                command.add(filesToAdd.toArray(new VirtualFile[filesToAdd.size()]));
+            }
+            catch (VcsException e) {
+                List<VcsException> es = new ArrayList<VcsException>();
+                es.add(e);
+                GitVcs.getInstance(project).showErrors(es, "Error adding file");
             }
         }
-    }
 
-    @Override
-    public void fileDeleted(@NotNull VirtualFileEvent event) {
-        super.fileDeleted(event);    //To change body of overridden methods use File | Settings | File Templates.
-    }
-
-    @Override
-    public void fileMoved(@NotNull VirtualFileMoveEvent event) {
-        super.fileMoved(event);    //To change body of overridden methods use File | Settings | File Templates.
+        statusChange(file);
     }
 
     @Override
     public void fileCopied(@NotNull VirtualFileCopyEvent event) {
-        super.fileCopied(event);    //To change body of overridden methods use File | Settings | File Templates.
-    }
-
-    @Override
-    public void beforePropertyChange(@NotNull VirtualFilePropertyEvent event) {
-        super.beforePropertyChange(event);    //To change body of overridden methods use File | Settings | File Templates.
-    }
-
-    @Override
-    public void beforeContentsChange(@NotNull VirtualFileEvent event) {
-        super.beforeContentsChange(event);
+        fileCreated(event);
     }
 
     @Override
     public void beforeFileDeletion(@NotNull VirtualFileEvent event) {
-        @NonNls final String TITLE = "Delete file(s)";
-        @NonNls final String MESSAGE = "Do you want to schedule the following file for deletion from Git?\n{0}";
-
-        VirtualFile file = event.getFile();
-
-        //  In the case of multi-vcs project configurations, we need to skip all
-        //  notifications on non-owned files
-        if (!VcsUtil.isFileForVcs(file, project, host))
-            return;
-
-        //  Do not ask user if the files created came from the vcs per se
-        //  (obviously they are not new).
         if (event.isFromRefresh())
             return;
 
-        //  Take into account only processable files.
-        if (isFileProcessable(file) && VcsUtil.isPathUnderProject(project, file)) {
-            VcsShowConfirmationOption option = host.getDeleteConfirmation();
+        final VirtualFile file = event.getFile();
+        if (!isFileProcessable(file))
+            return;
 
-            //  In the case when we need to perform "Delete" vcs action right upon
-            //  the file's creation, put the file into the host's cache until it
-            //  will be analyzed by the ChangeProvider.
-            if (option.getValue() == VcsShowConfirmationOption.Value.DO_ACTION_SILENTLY) {
-                deleteFile(file);
-            } else if (option.getValue() == VcsShowConfirmationOption.Value.SHOW_CONFIRMATION) {
-                List<VirtualFile> files = new ArrayList<VirtualFile>();
-                files.add(file);
+        List<VirtualFile> files = new ArrayList<VirtualFile>();
+        files.add(file);
+        Collection<VirtualFile> filesToDelete = new ArrayList<VirtualFile>(1);
+        VcsShowConfirmationOption option = vcs.getDeleteConfirmation();
+        VcsShowConfirmationOption.Value userOpt = option.getValue();
 
+        switch (userOpt) {
+            case SHOW_CONFIRMATION:
                 AbstractVcsHelper helper = AbstractVcsHelper.getInstance(project);
-                Collection<VirtualFile> filesToAdd =
-                        helper.selectFilesToProcess(files, TITLE, null, TITLE, MESSAGE, option);
-
-                if (filesToAdd != null) {
-                    deleteFile(file);
-                } else {
-                    deleteFile(file);
-                }
-            } else {
-                deleteFile(file);
-            }
+                filesToDelete = helper.selectFilesToProcess(files, DEL_TITLE, null, DEL_TITLE, DEL_MESSAGE, option);
+                break;
+            case DO_ACTION_SILENTLY:
+                filesToDelete.add(file);
+                break;
+            case DO_NOTHING_SILENTLY:
+                return;
         }
+
+//        VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
+//        if (filesToDelete != null && filesToDelete.size() > 0 && vcsRoot != null) {
+//            GitCommand command = new GitCommand(project, vcs.getSettings(), vcsRoot);
+//            try {
+//                command.delete(filesToDelete.toArray(new VirtualFile[filesToDelete.size()]));
+//            }
+//            catch (VcsException e) {
+//                List<VcsException> es = new ArrayList<VcsException>();
+//                es.add(e);
+//                GitVcs.getInstance(project).showErrors(es, "Error deleting file");
+//            }
+//        }
+    }
+
+    @Override
+    public void fileDeleted(@NotNull VirtualFileEvent event) {
+        statusChange(event.getFile());
     }
 
     @Override
     public void beforeFileMovement(@NotNull VirtualFileMoveEvent event) {
-        super.beforeFileMovement(event);  
+        if (event.isFromRefresh())
+            return;
+
+        final VirtualFile file = event.getFile();
+        if (!isFileProcessable(file))
+            return;
+
+        VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
+        GitCommand command = new GitCommand(project, vcs.getSettings(), vcsRoot);
+        try {
+            String oldPath = event.getOldParent().getPath();
+            String newPath = event.getNewParent().getPath();
+            String fileName = event.getFileName();
+            VirtualFile ovf = new GitVirtualFile(project, oldPath + "/" + fileName, GitVirtualFile.Status.DELETED);
+            VirtualFile nvf = new GitVirtualFile(project, newPath + "/" + fileName, GitVirtualFile.Status.ADDED);
+            command.move(ovf, nvf);
+        }
+        catch (VcsException e) {
+            List<VcsException> es = new ArrayList<VcsException>();
+            es.add(e);
+            GitVcs.getInstance(project).showErrors(es, "Error moving file");
+        }
+
     }
+
+    @Override
+    public void fileMoved(@NotNull VirtualFileMoveEvent event) {
+        statusChange(event.getOldParent());
+        statusChange(event.getNewParent());
+    }
+
+    @Override
+    public void propertyChanged(@NotNull VirtualFilePropertyEvent event) {  // do nothing
+    }
+
+    @Override
+    public void beforePropertyChange(@NotNull VirtualFilePropertyEvent event) {
+    }
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // LocalOperationsHandler
+    public boolean delete(VirtualFile file) throws IOException {
+        VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
+        GitCommand command = new GitCommand(project, vcs.getSettings(), vcsRoot);
+        try {
+            command.delete(new VirtualFile[]{file});
+        }
+        catch (VcsException e) {
+            throw new IOException("Error deleting file!", e);
+        }
+        return true;
+    }
+
+    public boolean move(VirtualFile file, VirtualFile toDir) throws IOException {
+        return false;  //To change body of implemented methods use File | Settings | File Templates.
+    }
+
+    @Nullable
+    public File copy(VirtualFile file, VirtualFile toDir, String copyName) throws IOException {
+        return null;  //To change body of implemented methods use File | Settings | File Templates.
+    }
+
+    public boolean rename(VirtualFile file, String newName) throws IOException {
+        return false;  //To change body of implemented methods use File | Settings | File Templates.
+    }
+
+    public boolean createFile(VirtualFile dir, String name) throws IOException {
+        return false;  //To change body of implemented methods use File | Settings | File Templates.
+    }
+
+    public boolean createDirectory(VirtualFile dir, String name) throws IOException {
+        return false;  //To change body of implemented methods use File | Settings | File Templates.
+    }
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Private methods
 
     /**
      * File is not processable if it is outside the vcs scope or it is in the
@@ -170,24 +261,13 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter {
      * @return Returns true of the file can be added.
      */
     private boolean isFileProcessable(VirtualFile file) {
-        VirtualFile base = project.getBaseDir();
-        return base != null && file.getPath().startsWith(base.getPath()) && !file.getName().contains(".git");
+        return VcsUtil.isFileForVcs(file, project, vcs) && !file.getName().contains(".git");
     }
 
-    /**
-     * Delete the specified file in Git
-     * @param file The file to delete
-     */
-    private void deleteFile(@NotNull VirtualFile file) {
-           VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
-           GitCommand command = new GitCommand(project, host.getSettings(), vcsRoot);
-           VirtualFile[] files = new VirtualFile[1];
-           files[0] = file;
-           try {
-               command.delete(files);
-           }
-           catch (VcsException e) {
-               e.printStackTrace();
-           }
-       }
+    private void statusChange(@NotNull VirtualFile file) {
+        if (file.isDirectory())
+            VcsDirtyScopeManager.getInstance(project).dirDirtyRecursively(file);
+        else
+            VcsDirtyScopeManager.getInstance(project).fileDirty(file);
+    }
 }

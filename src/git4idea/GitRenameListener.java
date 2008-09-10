@@ -13,6 +13,8 @@ package git4idea;
  * Authors: Mark Scott
  */
 
+// THIS CLASS IS NOT USED..............
+
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vcs.VcsException;
@@ -40,28 +42,21 @@ public class GitRenameListener implements RefactoringElementListener {
 
     public void elementRenamed(PsiElement newElement) {
         // IDEA has already moved the file at this point...
-        GitCommand cmd = new GitCommand(project, GitVcsSettings.getInstance(project), vcsRoot);
-        VirtualFile newFile = newElement.getContainingFile().getVirtualFile();
-        File newLoc = new File(newFile.getPath());
-        File oldLoc = new File(originalFilename);
-        try {
-            newLoc.renameTo(oldLoc);  // move back, let Git do the move
-            cmd.move(originalFilename, newFile.getPath());
-        } catch (SecurityException se) {
-            Messages.showErrorDialog(project, se.getMessage(), "Unable to move file, permission denied.");
-        } catch (VcsException ve) {
-            Messages.showErrorDialog(project, ve.getMessage(), "Error during 'git mv'");
-        }
+//        GitCommand cmd = new GitCommand(project, GitVcsSettings.getInstance(project), vcsRoot);
+//        VirtualFile newFile = newElement.getContainingFile().getVirtualFile();
+//        File newLoc = new File(newFile.getPath());
+//        File oldLoc = new File(originalFilename);
+//        try {
+//            newLoc.renameTo(oldLoc);  // move back, let Git do the move
+//           //cmd.move(originalFilename, newFile.getPath());
+//        } catch (SecurityException se) {
+//            Messages.showErrorDialog(project, se.getMessage(), "Unable to move file, permission denied.");
+//        } catch (VcsException ve) {
+//            Messages.showErrorDialog(project, ve.getMessage(), "Error during 'git mv'");
+//        }
     }
 
     public void elementMoved(PsiElement newElement) {
-        PsiFile pfile = (PsiFile) newElement;
-        PsiFile ofile = pfile.getOriginalFile();
-         
-        pfile.getName();
-
-        VirtualFile newFile = newElement.getContainingFile().getVirtualFile();
-        newFile.getPath();
         // not implemented due to IDEA bug(?) - doesn't pass any info about old element to listener provider
     }
 

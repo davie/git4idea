@@ -49,15 +49,10 @@ public class GitChangeProvider implements ChangeProvider {
     public void getChanges(VcsDirtyScope dirtyScope, ChangelistBuilder builder, ProgressIndicator progress) throws VcsException {
         Collection<VirtualFile> roots = dirtyScope.getAffectedContentRoots();
         for (VirtualFile root : roots) {
-            GitCommand command = new GitCommand(project, settings, root);
-            Set<FilePath> fpaths = dirtyScope.getDirtyFiles();
-            Set<GitVirtualFile> files = command.virtualFiles(fpaths);
-            Set<GitVirtualFile> cfiles = GitChangeMonitor.getInstance().getChangedFiles(root);
-            if(cfiles != null)
-                files.addAll(cfiles);
-            for (GitVirtualFile file : files) {
+            Set<VirtualFile> cfiles = GitChangeMonitor.getInstance().getChangedFiles(root);
+            if(cfiles == null || cfiles.size() == 0) return;
+            for (VirtualFile file : cfiles)
                 getChange(builder, file);
-            }
         }
     }
 
@@ -66,7 +61,7 @@ public class GitChangeProvider implements ChangeProvider {
         return false;
     }
 
-    private void getChange(ChangelistBuilder builder, GitVirtualFile file) {
+    private void getChange(ChangelistBuilder builder, VirtualFile file) {
         FilePath path = VcsUtil.getFilePath(file.getPath());
         VirtualFile vfile = VcsUtil.getVirtualFile(file.getPath());
         ContentRevision beforeRev = null;
@@ -74,7 +69,7 @@ public class GitChangeProvider implements ChangeProvider {
             beforeRev = new GitContentRevision(path, new GitRevisionNumber(GitRevisionNumber.TIP, new Date(file.getModificationStamp())), project);
         ContentRevision afterRev = CurrentContentRevision.create(path);
 
-        switch (file.getStatus()) {
+        switch (((GitVirtualFile)file).getStatus()) {
             case UNMERGED: {
                 builder.processChange(
                         new Change(beforeRev, afterRev, FileStatus.MERGED_WITH_CONFLICTS));
@@ -87,7 +82,7 @@ public class GitChangeProvider implements ChangeProvider {
             }
             case DELETED: {
                 builder.processChange(
-                        new Change(beforeRev, afterRev, FileStatus.DELETED));
+                        new Change(beforeRev, null, FileStatus.DELETED));
                 break;
             }
             case COPY:

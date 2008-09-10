@@ -5,7 +5,7 @@
     </description>
     <version>1.3</version>
     <vendor url="http://github.com/markscott/git4idea/tree/master" email="mscott@mqsoftware.com">MQSoftware</vendor>
-    <idea-version since-build="5000"/>
+    <idea-version since-build="5000" until-build="7999"/>
     <application-components>
         <component>
             <implementation-class>git4idea.GitFileSystem</implementation-class>

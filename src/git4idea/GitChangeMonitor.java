@@ -40,10 +40,10 @@ import org.jetbrains.annotations.Nullable;
  */
 public class GitChangeMonitor extends Thread implements ModuleRootListener {
     private boolean running = false;
-    public static int DEF_INTERVAL_SECS = 30;
+    public static int DEF_INTERVAL_SECS = 10;
     private long interval = DEF_INTERVAL_SECS * 1000L;
     private static GitChangeMonitor monitor = null;
-    private Map<VirtualFile, Set<GitVirtualFile>> changeMap;
+    private Map<VirtualFile, Set<VirtualFile>> changeMap;
     private GitVcsSettings settings;
     private Project project;
     private ChangeListManager changeListManager;
@@ -86,7 +86,7 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
         super("GitChangeMonitor");
         setDaemon(true);
         setInterval(secs);
-        changeMap = new ConcurrentHashMap<VirtualFile, Set<GitVirtualFile>>();
+        changeMap = new ConcurrentHashMap<VirtualFile, Set<VirtualFile>>();
     }
 
     /**
@@ -157,6 +157,7 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
                 throw new IllegalStateException("Project & VCS settings not set!");
             if (!running) {
                 running = true;
+                this.setName("GitChangeMonitor");
                 super.start();
             }
         } finally {
@@ -169,11 +170,11 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
         while (running) {
             try {
                 check();
-            } catch (RuntimeInterruptedException e) {
-            }
-            try {
                 sleep(interval);
             } catch (InterruptedException e) {
+            } catch (RuntimeInterruptedException e) {
+            } catch (Throwable e) {
+                e.printStackTrace();
             }
         }
     }
@@ -193,17 +194,8 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
     public void addRoot(VirtualFile root) {
         if (changeMap.containsKey(root))
             return;
-        Set<GitVirtualFile> files = new HashSet<GitVirtualFile>();
+        Set<VirtualFile> files = new HashSet<VirtualFile>();
         changeMap.put(root, files);
-    }
-
-    /**
-     * Delete the specified content root to be monitored
-     *
-     * @param root The top level directory to no longer monitor
-     */
-    public void deleteRoot(VirtualFile root) {
-        changeMap.remove(root);
     }
 
     /**
@@ -213,7 +205,7 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
      * @return The set of files that has changed
      */
     @Nullable
-    public Set<GitVirtualFile> getChangedFiles(VirtualFile root) {
+    public Set<VirtualFile> getChangedFiles(VirtualFile root) {
         return changeMap.get(root);
     }
 
@@ -222,71 +214,81 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
      */
     private void check() {
         Set<VirtualFile> roots = changeMap.keySet();
-        for (VirtualFile root : roots) {
-            GitCommand cmd = new GitCommand(project, settings, root);
-            try {
-                Set<GitVirtualFile> changedFiles = cmd.changedFiles();
-                if (changedFiles == null || changedFiles.size() == 0) {
-                    changeMap.remove(root);
-                } else {
-                    changeMap.put(root, changedFiles);
-                    Change[] allGitChanges = getChanges(changedFiles);
-                    for (Change gitChange : allGitChanges) { // go through every change Git finds & see if in
-                        // a changelist already, if not put in default changelist
-                        boolean matched = false;
-                        for (LocalChangeList list : changeListManager.getChangeLists()) {
-                            for (Change change : list.getChanges()) {
-                                if (gitChange.equals(change)) {
-                                    if(gitChange.getType() == change.getType()) {
-                                        matched = true;    // don't match if status/type is different
+
+        threadLock.lock();
+        try {
+            for (VirtualFile root : roots) {
+                GitCommand cmd = new GitCommand(project, settings, root);
+                try {
+                    Set<VirtualFile> changedFiles = cmd.changedFiles();
+                    if (changedFiles == null || changedFiles.size() == 0) {
+                        changeMap.put(root, new HashSet<VirtualFile>());
+                    } else {
+                        changeMap.put(root, changedFiles);
+                        Change[] allGitChanges = getChanges(changedFiles);
+                        for (Change gitChange : allGitChanges) { // go through every change Git finds & see if in
+                            // a changelist already, if not put in default changelist
+                            boolean matched = false;
+                            for (LocalChangeList list : changeListManager.getChangeLists()) {
+                                for (Change change : list.getChanges()) {
+                                    if (gitChange.equals(change)) {
+                                        if (gitChange.getType() == change.getType()) {
+                                            matched = true;    // don't match if status/type is different
+                                        }
+                                        break;
                                     }
-                                    break;
                                 }
+                                if (matched) break;
                             }
-                            if(matched) break;
-                        }
-                        if (!matched) {
-                            LocalChangeList gitList = changeListManager.getDefaultChangeList();
-                            if(gitList.isReadOnly())
-                                gitList.setReadOnly(false);
-                            changeListManager.moveChangesTo(gitList, new Change[] { gitChange} );
+                            if (!matched) {
+                                LocalChangeList gitList = changeListManager.getDefaultChangeList();
+                                if (gitList.isReadOnly())
+                                    gitList.setReadOnly(false);
+                                changeListManager.moveChangesTo(gitList, new Change[]{gitChange});
+                            }
                         }
                     }
-                    changeListManager.scheduleUpdate(true);
+                } catch (VcsException e) {
+                    e.printStackTrace();
                 }
-            } catch (VcsException e) {
-                e.printStackTrace();
             }
+        } finally {
+            threadLock.unlock();
         }
+        changeListManager.scheduleUpdate();
     }
 
     public void beforeRootsChange(ModuleRootEvent event) {     // unused
     }
 
     public void rootsChanged(ModuleRootEvent event) {
-        changeMap.clear();
-        for (VirtualFile root : ProjectRootManager.getInstance(project).getContentRoots())
-            addRoot(root);
+        threadLock.lock();
+        try {
+            changeMap.clear();
+            for (VirtualFile root : ProjectRootManager.getInstance(project).getContentRoots())
+                addRoot(root);
+        } finally {
+            threadLock.unlock();
+        }
         refresh();
     }
 
-    private Change[] getChanges(Collection<GitVirtualFile> files) {
+    private Change[] getChanges(Collection<VirtualFile> files) {
         Collection<Change> changes = new ArrayList<Change>();
-        for (GitVirtualFile file : files) {
+        for (VirtualFile file : files) {
             FilePath path = VcsUtil.getFilePath(file.getPath());
-            //VirtualFile vfile = VcsUtil.getVirtualFile(file.getPath());
             ContentRevision beforeRev = null;
             if (file != null)
                 beforeRev = new GitContentRevision(path, new GitRevisionNumber(GitRevisionNumber.TIP, new Date(file.getModificationStamp())), project);
             ContentRevision afterRev = CurrentContentRevision.create(path);
 
-            switch (file.getStatus()) {
+            switch (((GitVirtualFile) file).getStatus()) {
                 case UNMERGED: {
                     changes.add(new Change(beforeRev, afterRev, FileStatus.MERGED_WITH_CONFLICTS));
                     break;
                 }
                 case ADDED: {
-                    changes.add(new Change(null, afterRev, FileStatus.ADDED));
+                    changes.add(new Change(afterRev, afterRev, FileStatus.ADDED));
                     break;
                 }
                 case DELETED: {

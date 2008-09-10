@@ -39,6 +39,7 @@ import com.intellij.openapi.vcs.history.VcsRevisionNumber;
 import com.intellij.openapi.vcs.rollback.RollbackEnvironment;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
+import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.refactoring.listeners.RefactoringListenerManager;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -71,6 +72,7 @@ public class GitVcs extends AbstractVcs implements Disposable {
     private Configurable configurable;
     private RevisionSelector revSelector;
     private GitRefactoringListenerProvider refactorListener;
+    private GitVirtualFileAdaptor gitFileAdapter;
 
     public static GitVcs getInstance(@NotNull Project project) {
         return (GitVcs) ProjectLevelVcsManager.getInstance(project).findVcsByName(GIT);
@@ -210,11 +212,9 @@ public class GitVcs extends AbstractVcs implements Disposable {
             public void dispose() {
             }
         };
-
-        VirtualFileManager.getInstance().addVirtualFileListener(
-                new GitVirtualFileAdaptor(this, myProject),
-                activationDisposable);
-        RefactoringListenerManager.getInstance(myProject).addListenerProvider(refactorListener);
+        gitFileAdapter = new  GitVirtualFileAdaptor(this, myProject);
+        VirtualFileManager.getInstance().addVirtualFileListener(gitFileAdapter,activationDisposable);
+        LocalFileSystem.getInstance().registerAuxiliaryFileOperationsHandler(gitFileAdapter);
         GitChangeMonitor mon = GitChangeMonitor.getInstance(settings.GIT_INTERVAL);
         mon.setProject(myProject);
         mon.setGitVcsSettings(settings);
@@ -224,8 +224,9 @@ public class GitVcs extends AbstractVcs implements Disposable {
     @Override
     public void deactivate() {
         super.deactivate();
-
-        RefactoringListenerManager.getInstance(myProject).removeListenerProvider(refactorListener);
+        if(gitFileAdapter != null)
+        LocalFileSystem.getInstance().unregisterAuxiliaryFileOperationsHandler(gitFileAdapter);
+        VirtualFileManager.getInstance().removeVirtualFileListener(gitFileAdapter);
         assert activationDisposable != null;
         Disposer.dispose(activationDisposable);
         activationDisposable = null;

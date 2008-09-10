@@ -17,9 +17,9 @@ package git4idea;
  * This code was originally derived from the MKS & Mercurial IDEA VCS plugins
  */
 
-import git4idea.actions.GitAdd;
-import git4idea.actions.GitDelete;
-import git4idea.commands.GitCommand;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.progress.ProgressIndicator;
+import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.CheckinProjectPanel;
 import com.intellij.openapi.vcs.FilePath;
@@ -30,10 +30,19 @@ import com.intellij.openapi.vcs.changes.ContentRevision;
 import com.intellij.openapi.vcs.checkin.CheckinEnvironment;
 import com.intellij.openapi.vcs.ui.RefreshableOnComponent;
 import com.intellij.openapi.vfs.VirtualFile;
-import org.jetbrains.annotations.Nullable;
+import git4idea.actions.GitAdd;
+import git4idea.actions.GitDelete;
+import git4idea.commands.GitCommand;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Git environment for commit operations.
@@ -89,29 +98,54 @@ public class GitCheckinEnvironment implements CheckinEnvironment {
 
     @SuppressWarnings({"ConstantConditions"})
     @Override
-    public List<VcsException> commit(@NotNull List<Change> changes, @NotNull String message) {
-        List<VcsException> exceptions = new ArrayList<VcsException>();
-        Map<VirtualFile, List<Change>> sortedChanges = sortChangesByVcsRoot(changes);
+    public List<VcsException> commit(@NotNull final List<Change> changes, @NotNull final String message) {
+        final int changeCount = changes.size();
+        final List<VcsException> exceptions = new ArrayList<VcsException>(changeCount);
+        if(changeCount == 0) return null;
+        
+        Runnable command = new Runnable() {
+            public void run() {
+                final ProgressIndicator progress = ProgressManager.getInstance().getProgressIndicator();
+                progress.setIndeterminate(true);
 
-        for (VirtualFile root : sortedChanges.keySet()) {
-            GitCommand command = new GitCommand(project, settings, root);
-            Set<VirtualFile> files = new HashSet<VirtualFile>();
-            for (Change change : changes) {
-                if (change.getFileStatus().equals(FileStatus.MODIFIED))
-                    files.add(change.getAfterRevision().getFile().getVirtualFile());
-                else if (change.getFileStatus().equals(FileStatus.ADDED))
-                    files.add(change.getAfterRevision().getFile().getVirtualFile());
-                else if (change.getFileStatus().equals(FileStatus.DELETED))
-                    files.add(change.getBeforeRevision().getFile().getVirtualFile());
+                List<VcsException> exceptions = new ArrayList<VcsException>();
+                Map<VirtualFile, List<Change>> sortedChanges = sortChangesByVcsRoot(changes);
+                
+                if(changeCount == 1)
+                    progress.setText2("Commiting change...");
+                else
+                    progress.setText2("Commiting " + changes.size() + " changes...");
+
+                for (VirtualFile root : sortedChanges.keySet()) {
+                    GitCommand command = new GitCommand(project, settings, root);
+                    Set<VirtualFile> files = new HashSet<VirtualFile>();
+                    for (Change change : changes) {
+                        if (change.getFileStatus().equals(FileStatus.MODIFIED))
+                            files.add(new GitVirtualFile(project, change.getAfterRevision().getFile().getPath(),
+                                    GitVirtualFile.Status.MODIFIED));
+                        else if (change.getFileStatus().equals(FileStatus.ADDED))
+                            files.add(new GitVirtualFile(project, change.getAfterRevision().getFile().getPath(),
+                                    GitVirtualFile.Status.ADDED));
+                        else if (change.getFileStatus().equals(FileStatus.DELETED))
+                            files.add(new GitVirtualFile(project, change.getBeforeRevision().getFile().getPath(),
+                                    GitVirtualFile.Status.DELETED));
+                    }
+                    try {
+                        command.commit(files.toArray(new VirtualFile[files.size()]), message);
+                    }
+                    catch (VcsException e) {
+                        exceptions.add(e);
+                    }
+                }
             }
-            try {
-                command.commit(files.toArray(new VirtualFile[files.size()]), message);
-            }
-            catch (VcsException e) {
-                exceptions.add(e);
-            }
+        };
+
+        if (ApplicationManager.getApplication().isDispatchThread()) {
+            ProgressManager.getInstance().runProcessWithProgressSynchronously(command, "Commit", false, project);
+        } else {
+            command.run();
         }
-
+        
         return exceptions;
     }
 
@@ -146,17 +180,16 @@ public class GitCheckinEnvironment implements CheckinEnvironment {
         for (Change change : changes) {
             final ContentRevision afterRevision = change.getAfterRevision();
             final ContentRevision beforeRevision = change.getBeforeRevision();
-            if (beforeRevision != null) {
-                final FilePath filePath = afterRevision != null ? afterRevision.getFile() : beforeRevision.getFile();
-                final VirtualFile vcsRoot = GitUtil.getVcsRoot(project, filePath);
 
-                List<Change> changeList = result.get(vcsRoot);
-                if (changeList == null) {
-                    changeList = new ArrayList<Change>();
-                    result.put(vcsRoot, changeList);
-                }
-                changeList.add(change);
+            final FilePath filePath = afterRevision != null ? afterRevision.getFile() : beforeRevision.getFile();
+            final VirtualFile vcsRoot = GitUtil.getVcsRoot(project, filePath);
+
+            List<Change> changeList = result.get(vcsRoot);
+            if (changeList == null) {
+                changeList = new ArrayList<Change>();
+                result.put(vcsRoot, changeList);
             }
+            changeList.add(change);
         }
 
         return result;

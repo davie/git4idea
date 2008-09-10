@@ -16,14 +16,19 @@ package git4idea;
  *
  * This code was originally derived from the MKS & Mercurial IDEA VCS plugins
  */
+
 import com.intellij.openapi.vcs.vfs.VcsFileSystem;
+import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.project.Project;
+import com.intellij.vcsUtil.VcsUtil;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.io.IOException;
+
+import git4idea.commands.GitCommand;
 
 /**
  * Git VCS filesystem implementation
@@ -112,13 +117,13 @@ public class GitFileSystem extends VcsFileSystem {
     }
 
     @Override
-    public void deleteFile(Object requestor, VirtualFile vFile) throws IOException {
-        throw new RuntimeException(COULD_NOT_IMPLEMENT_MESSAGE);
+    public void deleteFile(Object requestor, VirtualFile file) throws IOException {
+        // Git delete happens in GitVirtualFileAdaptor.beforeFileDeletion()
     }
 
     @Override
     public void moveFile(Object requestor, VirtualFile vFile, VirtualFile newParent) throws IOException {
-        throw new RuntimeException(COULD_NOT_IMPLEMENT_MESSAGE);
+        // Git file is moved in GitVirtualFileAdaptor.beforeFileMovement()
     }
 
     @Override
@@ -127,8 +132,22 @@ public class GitFileSystem extends VcsFileSystem {
     }
 
     @Override
-    public void renameFile(Object requestor, VirtualFile vFile, String newName) throws IOException {
-        throw new RuntimeException(COULD_NOT_IMPLEMENT_MESSAGE);
+    public void renameFile(Object requestor, VirtualFile file, String newName) throws IOException {
+        Project project = null;
+        for (Project p : projects.keySet()) {
+            if(VcsUtil.isPathUnderProject(p, file))
+                project = p;
+        }
+
+        if (project == null) return;
+        VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
+        GitVcs vcs = (GitVcs) VcsUtil.getVcsFor(project, file);
+        GitCommand command = new GitCommand(project, vcs.getSettings(), vcsRoot);
+        try {
+            command.move(file, VcsUtil.getVirtualFile(newName));
+        } catch (VcsException ve) {
+            throw new IOException("Error renaming file!", ve);
+        }
     }
 
     @Override

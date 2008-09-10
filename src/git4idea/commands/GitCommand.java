@@ -26,6 +26,7 @@ import com.intellij.openapi.vcs.history.VcsFileRevision;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.EnvironmentUtil;
+import com.intellij.vcsUtil.VcsUtil;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.*;
@@ -220,21 +221,26 @@ public class GitCommand {
      * @return The set of all changed files
      * @throws VcsException If an error occurs
      */
-    public Set<GitVirtualFile> changedFiles() throws VcsException {
-        Set<GitVirtualFile> files = new HashSet<GitVirtualFile>();
+    public Set<VirtualFile> changedFiles() throws VcsException {
+        Set<VirtualFile> files = new HashSet<VirtualFile>();
+        String output = null;
         List<String> args = new ArrayList<String>();
-
+        args.add("--cached");
         args.add("--name-status");
         args.add("--diff-filter=ADMRUX");
         args.add("--");
+        output = execute(DIFF_CMD, args, true);
 
-        String output = execute(DIFF_CMD, args, true);
-        args.add(0, "--cached");
-        output += execute(DIFF_CMD, args, true);
+        //TODO: tie to user config option for "Always keep Git index in sync ("git add") with every file save?"
+        // Look for files not cached in the Git index yet
+        // args.remove(0);
+        // output += execute(DIFF_CMD, args, true);
 
         StringTokenizer tokenizer;
         if (output != null && output.length() > 0) {
-            tokenizer = new StringTokenizer(output, line_sep);
+            if(output.startsWith("null"))
+                output = output.substring(4);
+            tokenizer = new StringTokenizer(output, "\n");
             while (tokenizer.hasMoreTokens()) {
                 final String s = tokenizer.nextToken();
                 String[] larr = s.split("\t");
@@ -245,17 +251,18 @@ public class GitCommand {
             }
         }
 
-        args.clear();
-        args.add("--others");
-        output = execute("ls-files", args, true);
-        if (output != null && output.length() > 0) {
-            tokenizer = new StringTokenizer(output, line_sep);
-            while (tokenizer.hasMoreTokens()) {
-                final String s = tokenizer.nextToken();
-                GitVirtualFile file = new GitVirtualFile(project, getBasePath() + File.separator + s.trim(), GitVirtualFile.Status.UNVERSIONED);
-                files.add(file);
-            }
-        }
+        //TODO: add user config option for tracking UNVERSIONED files - much slower...
+//        args.clear();
+//        args.add("--others");
+//        output = execute("ls-files", args, true);
+//        if (output != null && output.length() > 0) {
+//            tokenizer = new StringTokenizer(output, line_sep);
+//            while (tokenizer.hasMoreTokens()) {
+//                final String s = tokenizer.nextToken();
+//                GitVirtualFile file = new GitVirtualFile(project, getBasePath() + File.separator + s.trim(), GitVirtualFile.Status.UNVERSIONED);
+//                files.add(file);
+//            }
+//        }
 
         return files;
     }
@@ -384,6 +391,11 @@ public class GitCommand {
         String[] args = new String[files.length];
         int count = 0;
         for (VirtualFile file : files) {
+            if(file instanceof GitVirtualFile) {   // don't try to add already deleted files...
+                GitVirtualFile gvf = (GitVirtualFile)file;
+                if(gvf.getStatus() == GitVirtualFile.Status.DELETED)
+                    continue;
+            }
             if(file != null)
                 args[count++] = getRelativeFilePath(file, vcsRoot);
         }
@@ -509,10 +521,9 @@ public class GitCommand {
      *
      * @throws VcsException If an error occurs
      */
-    public void move(String oldFile, String newFile) throws VcsException {
-        if( oldFile == null || newFile == null || oldFile.length() == 0 || newFile.length() == 0)
-            throw new VcsException("Cannot move empty path element(s)!");
-        String [] files = new String[] { getRelativeFilePath(oldFile, vcsRoot), getRelativeFilePath(newFile, vcsRoot) };
+    public void move(@NotNull VirtualFile oldFile, @NotNull VirtualFile newFile) throws VcsException {
+        String [] files = new String[] { getRelativeFilePath(oldFile.getPath(), vcsRoot),
+                getRelativeFilePath(newFile.getPath(), vcsRoot) };
         String result = execute(MOVE_CMD, files, false);
         GitVcs.getInstance(project).showMessages(result);
     }
@@ -782,10 +793,11 @@ public class GitCommand {
 
     public String getRelativeFilePath(String file, @NotNull final VirtualFile baseDir) {
         if(file == null) return null;
+        String rfile = file.replace("\\", "/");
         final String basePath = baseDir.getPath();
-        if (!file.startsWith(basePath)) return file;
-        else if (file.equals(basePath)) return ".";
-        return file.substring(baseDir.getPath().length() + 1);
+        if (!rfile.startsWith(basePath)) return rfile;
+        else if (rfile.equals(basePath)) return ".";
+        return rfile.substring(baseDir.getPath().length() + 1);
     }
 
     private String execute(String cmd, String arg) throws VcsException {
