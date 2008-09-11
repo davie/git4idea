@@ -16,14 +16,21 @@ package git4idea.actions;
  *
  * This code was originally derived from the MKS & Mercurial IDEA VCS plugins
  */
+
+import com.intellij.openapi.project.Project;
+import com.intellij.openapi.vcs.AbstractVcs;
+import com.intellij.openapi.vcs.FileStatus;
+import com.intellij.openapi.vcs.FileStatusManager;
+import com.intellij.openapi.vcs.ProjectLevelVcsManager;
+import com.intellij.openapi.vcs.VcsException;
+import com.intellij.openapi.vcs.changes.VcsDirtyScopeManager;
+import com.intellij.openapi.vfs.VirtualFile;
 import git4idea.GitUtil;
 import git4idea.GitVcs;
 import git4idea.GitVcsSettings;
+import git4idea.GitVirtualFileAdaptor;
+import git4idea.GitChangeMonitor;
 import git4idea.commands.GitCommand;
-import com.intellij.openapi.project.Project;
-import com.intellij.openapi.vcs.*;
-import com.intellij.openapi.vcs.changes.VcsDirtyScopeManager;
-import com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
@@ -55,6 +62,8 @@ public class GitDelete extends BasicAction {
             mgr.fileDirty(file);
             file.refresh(true, true);
         }
+
+         GitChangeMonitor.getInstance().refresh();
     }
 
     public static void deleteFiles(@NotNull Project project, @NotNull VirtualFile[] files) throws VcsException {
@@ -81,8 +90,10 @@ public class GitDelete extends BasicAction {
 
     @Override
     protected boolean isEnabled(@NotNull Project project, @NotNull GitVcs vcs, @NotNull VirtualFile... vFiles) {
+        GitVirtualFileAdaptor fa = vcs.getFileAdapter();
         for (VirtualFile file : vFiles) {
-            if (FileStatusManager.getInstance(project).getStatus(file) == FileStatus.UNKNOWN)
+            if(!fa.isFileProcessable(file)) return false;
+            if (fa.isFileProcessable(file) && (!fa.knownFile(file)) )
                 return false;
         }
 

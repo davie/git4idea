@@ -26,14 +26,42 @@ import com.intellij.openapi.vcs.history.VcsFileRevision;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.EnvironmentUtil;
+import git4idea.GitBranch;
+import git4idea.GitChangeMonitor;
+import git4idea.GitFileAnnotation;
+import git4idea.GitFileRevision;
+import git4idea.GitRevisionNumber;
+import git4idea.GitUtil;
+import git4idea.GitVcs;
+import git4idea.GitVcsSettings;
+import git4idea.GitVirtualFile;
 import org.jetbrains.annotations.NotNull;
 
-import java.io.*;
-import java.util.*;
-import java.text.SimpleDateFormat;
+import java.io.BufferedInputStream;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.StringReader;
 import java.text.ParseException;
-
-import git4idea.*;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.StringTokenizer;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Worker class for executing Git system commands.
@@ -66,10 +94,11 @@ public class GitCommand {
     private static final String VERSION_CMD = "version";
     public static final String STASH_CMD = "stash";
     public static final String MERGETOOL_CMD = "mergetool";
-    public static final String STATUS_CMD = "status";
+    public static final String STATUS_CMD = "ls-files";
 
     /* Misc Git constants */
     private static final String HEAD = "HEAD";
+    private static final Lock gitWriteLock = new ReentrantLock();
 
     /* Git command env stuff */
     private Project project;
@@ -238,7 +267,7 @@ public class GitCommand {
 
         StringTokenizer tokenizer;
         if (output != null && output.length() > 0) {
-            if(output.startsWith("null"))
+            if (output.startsWith("null"))
                 output = output.substring(4);
             tokenizer = new StringTokenizer(output, "\n");
             while (tokenizer.hasMoreTokens()) {
@@ -292,7 +321,6 @@ public class GitCommand {
         }
 
         String vcsPath = revCmd.append(getRelativeFilePath(path, vcsRoot)).toString();
-        vcsPath = vcsPath.replace("\\", "\\\\");
         return execute(SHOW_CMD, Collections.singletonList(vcsPath), true);
     }
 
@@ -388,20 +416,25 @@ public class GitCommand {
      * @throws VcsException If an error occurs
      */
     public void add(VirtualFile[] files) throws VcsException {
-        String[] args = new String[files.length];
-        int count = 0;
-        for (VirtualFile file : files) {
-            if(file instanceof GitVirtualFile) {   // don't try to add already deleted files...
-                GitVirtualFile gvf = (GitVirtualFile)file;
-                if(gvf.getStatus() == GitVirtualFile.Status.DELETED)
-                    continue;
+        gitWriteLock.lock();
+        try {
+            String[] args = new String[files.length];
+            int count = 0;
+            for (VirtualFile file : files) {
+                if (file instanceof GitVirtualFile) {   // don't try to add already deleted files...
+                    GitVirtualFile gvf = (GitVirtualFile) file;
+                    if (gvf.getStatus() == GitVirtualFile.Status.DELETED)
+                        continue;
+                }
+                if (file != null)
+                    args[count++] = getRelativeFilePath(file, vcsRoot);
             }
-            if(file != null)
-                args[count++] = getRelativeFilePath(file, vcsRoot);
-        }
 
-        String result = execute(ADD_CMD, (String[]) null, args);
-        GitVcs.getInstance(project).showMessages(result);
+            String result = execute(ADD_CMD, (String[]) null, args);
+            GitVcs.getInstance(project).showMessages(result);
+        } finally {
+            gitWriteLock.unlock();
+        }
     }
 
     /**
@@ -413,45 +446,50 @@ public class GitCommand {
      */
     @SuppressWarnings({"EmptyCatchBlock"})
     public void commit(VirtualFile[] files, String message) throws VcsException {
-        StringBuffer commitMessage = new StringBuffer();
-        StringTokenizer tok = new StringTokenizer(message, "\n");
-        while (tok.hasMoreTokens()) {
-            String line = tok.nextToken();
-            if (line == null || line.startsWith("#")) // eat all comment lines
-                continue;
-            commitMessage.append(line).append("\n");
-        }
-
-        String[] options = null;
-
+        gitWriteLock.lock();
         try {
-            File temp = File.createTempFile("git-commit-msg", ".txt");
-            temp.deleteOnExit();
-            BufferedWriter out = new BufferedWriter(new FileWriter(temp));
-            out.write(commitMessage.toString());
-            out.close();
-            options = new String[]{"-F", temp.getAbsolutePath()};
-        } catch (IOException e) {
-        }
-
-        String[] args = new String[files.length];
-        int count = 0;
-        for (VirtualFile file : files) {
-            if(file != null)
-                args[count++] = getRelativeFilePath(file, vcsRoot);
-        }
-
-        add(files); // add current snapshot to index first..
-        String result = execute(COMMIT_CMD, options, args);  // now commit the files
-        GitVcs.getInstance(project).showMessages(result);
-        GitChangeMonitor.getInstance().refresh();
-
-        VcsDirtyScopeManager mgr = VcsDirtyScopeManager.getInstance(project);
-        for (VirtualFile file : files) {
-            if(file != null) {
-                mgr.fileDirty(file);
-                file.refresh(true, true);
+            StringBuffer commitMessage = new StringBuffer();
+            StringTokenizer tok = new StringTokenizer(message, "\n");
+            while (tok.hasMoreTokens()) {
+                String line = tok.nextToken();
+                if (line == null || line.startsWith("#")) // eat all comment lines
+                    continue;
+                commitMessage.append(line).append("\n");
             }
+
+            String[] options = null;
+
+            try {
+                File temp = File.createTempFile("git-commit-msg", ".txt");
+                temp.deleteOnExit();
+                BufferedWriter out = new BufferedWriter(new FileWriter(temp));
+                out.write(commitMessage.toString());
+                out.close();
+                options = new String[]{"-F", temp.getAbsolutePath()};
+            } catch (IOException e) {
+            }
+
+            String[] args = new String[files.length];
+            int count = 0;
+            for (VirtualFile file : files) {
+                if (file != null)
+                    args[count++] = getRelativeFilePath(file, vcsRoot);
+            }
+
+            add(files); // add current snapshot to index first..
+            String result = execute(COMMIT_CMD, options, args);  // now commit the files
+            GitVcs.getInstance(project).showMessages(result);
+            GitChangeMonitor.getInstance().refresh();
+
+            VcsDirtyScopeManager mgr = VcsDirtyScopeManager.getInstance(project);
+            for (VirtualFile file : files) {
+                if (file != null) {
+                    mgr.fileDirty(file);
+                    file.refresh(true, true);
+                }
+            }
+        } finally {
+            gitWriteLock.unlock();
         }
     }
 
@@ -462,16 +500,21 @@ public class GitCommand {
      * @throws VcsException If an error occurs
      */
     public void delete(VirtualFile[] files) throws VcsException {
-        String[] args = new String[files.length];
-        String[] opts = {"-f"};
-        int count = 0;
-        for (VirtualFile file : files) {
-            if(file != null)
-                args[count++] = getRelativeFilePath(file, vcsRoot);
-        }
+        gitWriteLock.lock();
+        try {
+            String[] args = new String[files.length];
+            String[] opts = {"-f"};
+            int count = 0;
+            for (VirtualFile file : files) {
+                if (file != null)
+                    args[count++] = getRelativeFilePath(file, vcsRoot);
+            }
 
-        String result = execute(DELETE_CMD, opts, args);
-        GitVcs.getInstance(project).showMessages(result);
+            String result = execute(DELETE_CMD, opts, args);
+            GitVcs.getInstance(project).showMessages(result);
+        } finally {
+            gitWriteLock.unlock();
+        }
     }
 
     /**
@@ -482,15 +525,20 @@ public class GitCommand {
      * @throws VcsException If an error occurs
      */
     public void checkout(String selectedBranch, boolean createBranch) throws VcsException {
-        ArrayList<String> args = new ArrayList<String>();
-        if (createBranch) {
-            args.add("--track");
-            args.add("-b");
-        }
-        args.add(selectedBranch);
+        gitWriteLock.lock();
+        try {
+            ArrayList<String> args = new ArrayList<String>();
+            if (createBranch) {
+                args.add("--track");
+                args.add("-b");
+            }
+            args.add(selectedBranch);
 
-        String result = execute(CHECKOUT_CMD, args);
-        GitVcs.getInstance(project).showMessages(result);
+            String result = execute(CHECKOUT_CMD, args);
+            GitVcs.getInstance(project).showMessages(result);
+        } finally {
+            gitWriteLock.unlock();
+        }
     }
 
     /**
@@ -501,9 +549,14 @@ public class GitCommand {
      * @throws VcsException If an error occurs
      */
     public void cloneRepository(String src, String target) throws VcsException {
-        String[] args = new String[]{src, target};
-        String result = execute(CLONE_CMD, (String) null, args);
-        GitVcs.getInstance(project).showMessages(result);
+        gitWriteLock.lock();
+        try {
+            String[] args = new String[]{src, target};
+            String result = execute(CLONE_CMD, (String) null, args);
+            GitVcs.getInstance(project).showMessages(result);
+        } finally {
+            gitWriteLock.unlock();
+        }
     }
 
     /**
@@ -512,8 +565,13 @@ public class GitCommand {
      * @throws VcsException If an error occurs
      */
     public void merge() throws VcsException {
-        String result = execute(MERGE_CMD);
-        GitVcs.getInstance(project).showMessages(result);
+        gitWriteLock.lock();
+        try {
+            String result = execute(MERGE_CMD);
+            GitVcs.getInstance(project).showMessages(result);
+        } finally {
+            gitWriteLock.unlock();
+        }
     }
 
     /**
@@ -524,10 +582,15 @@ public class GitCommand {
      * @throws VcsException If an error occurs
      */
     public void move(@NotNull VirtualFile oldFile, @NotNull VirtualFile newFile) throws VcsException {
-        String [] files = new String[] { getRelativeFilePath(oldFile.getPath(), vcsRoot),
-                getRelativeFilePath(newFile.getPath(), vcsRoot) };
-        String result = execute(MOVE_CMD, files, false);
-        GitVcs.getInstance(project).showMessages(result);
+        gitWriteLock.lock();
+        try {
+            String[] files = new String[]{getRelativeFilePath(oldFile.getPath(), vcsRoot),
+                    getRelativeFilePath(newFile.getPath(), vcsRoot)};
+            String result = execute(MOVE_CMD, files, false);
+            GitVcs.getInstance(project).showMessages(result);
+        } finally {
+            gitWriteLock.unlock();
+        }
     }
 
     /**
@@ -536,8 +599,13 @@ public class GitCommand {
      * @throws VcsException If an error occurs
      */
     public void gc() throws VcsException {
-        String result = execute(GC_CMD);
-        GitVcs.getInstance(project).showMessages(result);
+        gitWriteLock.lock();
+        try {
+            String result = execute(GC_CMD);
+            GitVcs.getInstance(project).showMessages(result);
+        } finally {
+            gitWriteLock.unlock();
+        }
     }
 
     /**
@@ -547,8 +615,13 @@ public class GitCommand {
      * @throws VcsException If an error occurs
      */
     public void merge(GitBranch branch) throws VcsException {
-        String result = execute(MERGE_CMD, branch.getName());
-        GitVcs.getInstance(project).showMessages(result);
+        gitWriteLock.lock();
+        try {
+            String result = execute(MERGE_CMD, branch.getName());
+            GitVcs.getInstance(project).showMessages(result);
+        } finally {
+            gitWriteLock.unlock();
+        }
     }
 
     /**
@@ -557,8 +630,13 @@ public class GitCommand {
      * @throws VcsException If an error occurs
      */
     public void rebase() throws VcsException {
-        String result = execute(REBASE_CMD);
-        GitVcs.getInstance(project).showMessages(result);
+        gitWriteLock.lock();
+        try {
+            String result = execute(REBASE_CMD);
+            GitVcs.getInstance(project).showMessages(result);
+        } finally {
+            gitWriteLock.unlock();
+        }
     }
 
     /**
@@ -569,16 +647,21 @@ public class GitCommand {
      * @throws VcsException If an error occurs
      */
     public void pull(String repoURL, boolean merge) throws VcsException {
-        String cmd;
-        if (merge)
-            cmd = PULL_CMD;
-        else
-            cmd = FETCH_CMD;
+        gitWriteLock.lock();
+        try {
+            String cmd;
+            if (merge)
+                cmd = PULL_CMD;
+            else
+                cmd = FETCH_CMD;
 
-        String result = execute(cmd, repoURL);
-        GitVcs.getInstance(project).showMessages(result);
-        result = execute(cmd, "--tags", repoURL);
-        GitVcs.getInstance(project).showMessages(result);
+            String result = execute(cmd, repoURL);
+            GitVcs.getInstance(project).showMessages(result);
+            result = execute(cmd, "--tags", repoURL);
+            GitVcs.getInstance(project).showMessages(result);
+        } finally {
+            gitWriteLock.unlock();
+        }
     }
 
     /**
@@ -600,16 +683,21 @@ public class GitCommand {
      * @throws VcsException Id it breaks.
      */
     public void revert(VirtualFile[] files) throws VcsException {
-        String[] args = new String[files.length];
-        String[] options = new String[]{HEAD, "--"};
-        int count = 0;
-        for (VirtualFile file : files) {
-            if(file != null)
-                args[count++] = getRelativeFilePath(file, vcsRoot);
-        }
+        gitWriteLock.lock();
+        try {
+            String[] args = new String[files.length];
+            String[] options = new String[]{HEAD, "--"};
+            int count = 0;
+            for (VirtualFile file : files) {
+                if (file != null)
+                    args[count++] = getRelativeFilePath(file, vcsRoot);
+            }
 
-        String result = execute(REVERT_CMD, options, args);
-        GitVcs.getInstance(project).showMessages(result);
+            String result = execute(REVERT_CMD, options, args);
+            GitVcs.getInstance(project).showMessages(result);
+        } finally {
+            gitWriteLock.unlock();
+        }
     }
 
     /**
@@ -629,8 +717,13 @@ public class GitCommand {
      * @throws VcsException If an error occurs
      */
     public void tag(String tagName) throws VcsException {
-        String result = execute(TAG_CMD, tagName);
-        GitVcs.getInstance(project).showMessages(result);
+        gitWriteLock.lock();
+        try {
+            String result = execute(TAG_CMD, tagName);
+            GitVcs.getInstance(project).showMessages(result);
+        } finally {
+            gitWriteLock.unlock();
+        }
     }
 
     /**
@@ -640,8 +733,13 @@ public class GitCommand {
      * @throws VcsException If an error occurs
      */
     public void stash(String stashName) throws VcsException {
-        String result = execute(STASH_CMD, stashName);
-        GitVcs.getInstance(project).showMessages(result);
+        gitWriteLock.lock();
+        try {
+            String result = execute(STASH_CMD, stashName);
+            GitVcs.getInstance(project).showMessages(result);
+        } finally {
+            gitWriteLock.unlock();
+        }
     }
 
     /**
@@ -651,8 +749,13 @@ public class GitCommand {
      * @throws VcsException If an error occurs
      */
     public void unstash(String stashName) throws VcsException {
-        String result = execute(STASH_CMD, "apply", stashName);
-        GitVcs.getInstance(project).showMessages(result);
+        gitWriteLock.lock();
+        try {
+            String result = execute(STASH_CMD, "apply", stashName);
+            GitVcs.getInstance(project).showMessages(result);
+        } finally {
+            gitWriteLock.unlock();
+        }
     }
 
     /**
@@ -677,16 +780,13 @@ public class GitCommand {
      * Return true if the specified file is known to Git, otherwise false.
      *
      * @param file the file to check status of
-     * @throws VcsException If an error occurs
      * @return true if Git owns the file, else false
+     * @throws VcsException If an error occurs
      */
     public boolean status(VirtualFile file) throws VcsException {
-        try {
-            execute(STATUS_CMD, getRelativeFilePath(file, GitUtil.getVcsRoot(project, file)));
-            return true;
-        } catch(VcsException e) {
-            return false;
-        }
+        String path = getRelativeFilePath(file, GitUtil.getVcsRoot(project, file));
+        String output = execute(STATUS_CMD, path);
+        return !(output == null || output.length() == 0) && output.contains(path);
     }
 
     /**
@@ -697,10 +797,10 @@ public class GitCommand {
      */
     public void mergetool(String[] files) throws VcsException {
         String result;
-        if(files == null || files.length==0)
+        if (files == null || files.length == 0)
             result = execute(MERGETOOL_CMD);
         else
-            result = execute(MERGETOOL_CMD, (String[])null, files);
+            result = execute(MERGETOOL_CMD, (String[]) null, files);
         GitVcs.getInstance(project).showMessages(result);
     }
 
@@ -714,7 +814,7 @@ public class GitCommand {
         String wishcmd;
         String gitkcmd;
         File gitExec = new File(settings.GIT_EXECUTABLE);
-        if(gitExec.exists()) {  // use absolute path if we can
+        if (gitExec.exists()) {  // use absolute path if we can
             String sep = System.getProperty("file.separator", "\\");
             wishcmd = gitExec.getParent() + sep + "wish84";
             gitkcmd = gitExec.getParent() + sep + "gitk";
@@ -751,67 +851,68 @@ public class GitCommand {
      *
      * @param filePath The path to the file.
      * @return The GitFileAnnotation.
-     * @throws com.intellij.openapi.vcs.VcsException If it fails...
+     * @throws com.intellij.openapi.vcs.VcsException
+     *          If it fails...
      */
-      public GitFileAnnotation annotate(FilePath filePath) throws VcsException {
-         String[] options = new String[]{"-l", "--"};
+    public GitFileAnnotation annotate(FilePath filePath) throws VcsException {
+        String[] options = new String[]{"-l", "--"};
 
-         String[] args = new String[]{getRelativeFilePath(filePath.getPath(), vcsRoot)};
+        String[] args = new String[]{getRelativeFilePath(filePath.getPath(), vcsRoot)};
 
-         String cmdOutput = execute("annotate", options, args);
-         BufferedReader in = new BufferedReader(new StringReader(cmdOutput));
-         GitFileAnnotation annotation = new GitFileAnnotation(project);
+        String cmdOutput = execute("annotate", options, args);
+        BufferedReader in = new BufferedReader(new StringReader(cmdOutput));
+        GitFileAnnotation annotation = new GitFileAnnotation(project);
 
-         SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z");
+        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z");
 
-         String Line;
-         try {
+        String Line;
+        try {
             while ((Line = in.readLine()) != null) {
-               String annValues[] = Line.split("\t", 4);
-               if (annValues.length != 4) {
-                  throw new VcsException("Framing error: unexpected number of values");
-               }
+                String annValues[] = Line.split("\t", 4);
+                if (annValues.length != 4) {
+                    throw new VcsException("Framing error: unexpected number of values");
+                }
 
-               String revision = annValues[0];
-               String user = annValues[1];
-               String dateStr = annValues[2];
-               String numberedLine = annValues[3];
+                String revision = annValues[0];
+                String user = annValues[1];
+                String dateStr = annValues[2];
+                String numberedLine = annValues[3];
 
-               if (revision.length() != 40) {
-                  throw new VcsException("Framing error: Illegal revision number: " + revision);
-               }
+                if (revision.length() != 40) {
+                    throw new VcsException("Framing error: Illegal revision number: " + revision);
+                }
 
-               int idx = numberedLine.indexOf(')');
-               if (!user.startsWith("(") || idx <= 0) {
-                  throw new VcsException("Framing error: unexpected format");
-               }
-               user = user.substring(1).trim(); // Ditch the (
-               Long lineNumber = Long.valueOf(numberedLine.substring(0, idx));
-               String lineContents = numberedLine.substring(idx + 1);
+                int idx = numberedLine.indexOf(')');
+                if (!user.startsWith("(") || idx <= 0) {
+                    throw new VcsException("Framing error: unexpected format");
+                }
+                user = user.substring(1).trim(); // Ditch the (
+                Long lineNumber = Long.valueOf(numberedLine.substring(0, idx));
+                String lineContents = numberedLine.substring(idx + 1);
 
-               Date date = dateFormat.parse(dateStr);
-               annotation.appendLineInfo(date, new GitRevisionNumber(revision, date), user, lineContents, lineNumber);
+                Date date = dateFormat.parse(dateStr);
+                annotation.appendLineInfo(date, new GitRevisionNumber(revision, date), user, lineContents, lineNumber);
             }
 
-         } catch (IOException e) {
+        } catch (IOException e) {
             throw new VcsException("Failed to load annotations", e);
-         } catch (ParseException e) {
+        } catch (ParseException e) {
             throw new VcsException("Failed to load annotations", e);
-         }
-         return annotation;
-      }
+        }
+        return annotation;
+    }
 
     /////////////////////////////////////////////////////////////////////////////////////////////
     // Private worker & helper methods
     ////////////////////////////////////////////////////////////////////////////////////////////
 
     public String getRelativeFilePath(VirtualFile file, @NotNull final VirtualFile baseDir) {
-        if(file == null) return null;
+        if (file == null) return null;
         return getRelativeFilePath(file.getPath(), baseDir);
     }
 
     public String getRelativeFilePath(String file, @NotNull final VirtualFile baseDir) {
-        if(file == null) return null;
+        if (file == null) return null;
         String rfile = file.replace("\\", "/");
         final String basePath = baseDir.getPath();
         if (!rfile.startsWith(basePath)) return rfile;
@@ -848,14 +949,14 @@ public class GitCommand {
     private String execute(String cmd, String[] options, String[] args) throws VcsException {
         List<String> cmdLine = new ArrayList<String>();
         if (options != null) {
-            for(String opt: options) {
-                if(opt != null)
+            for (String opt : options) {
+                if (opt != null)
                     cmdLine.add(opt);
             }
         }
         if (args != null) {
-            for(String arg: args) {
-                if(arg != null)
+            for (String arg : args) {
+                if (arg != null)
                     cmdLine.add(arg);
             }
         }
@@ -883,8 +984,8 @@ public class GitCommand {
         cmdLine.add(settings.GIT_EXECUTABLE);
         cmdLine.add(cmd);
         if (cmdArgs != null) {
-            for(String arg: cmdArgs) {
-                if(arg != null)
+            for (String arg : cmdArgs) {
+                if (arg != null)
                     cmdLine.add(arg);
             }
         }
@@ -892,14 +993,14 @@ public class GitCommand {
         File directory = VfsUtil.virtualToIoFile(vcsRoot);
 
         String cmdStr = null;
-        if(DEBUG) {
+        if (DEBUG) {
             cmdStr = StringUtil.join(cmdLine, " ");
             GitVcs.getInstance(project).showMessages("DEBUG: work-dir: [" + directory.getAbsolutePath() + "]" +
                     " exec: [" + cmdStr + "]");
         }
 
         if (!silent && !DEBUG) { // dont' print twice in DEBUG mode
-            if(cmdStr == null)
+            if (cmdStr == null)
                 cmdStr = StringUtil.join(cmdLine, " ");
             GitVcs.getInstance(project).showMessages("git" + cmdStr.substring(settings.GIT_EXECUTABLE.length()));
         }

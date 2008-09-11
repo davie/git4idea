@@ -59,10 +59,6 @@ public class GitFileSystem extends VcsFileSystem {
         return file;
     }
 
-    public static String getRevisionGraphUrl(String filePath) {
-        return PROTOCOL + "://" + PREFIX_REV_GRAPH + "#" + filePath;
-    }
-
     @Override
     public String getProtocol() {
         return PROTOCOL;
@@ -133,21 +129,7 @@ public class GitFileSystem extends VcsFileSystem {
 
     @Override
     public void renameFile(Object requestor, VirtualFile file, String newName) throws IOException {
-        Project project = null;
-        for (Project p : projects.keySet()) {
-            if(VcsUtil.isPathUnderProject(p, file))
-                project = p;
-        }
-
-        if (project == null) return;
-        VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
-        GitVcs vcs = (GitVcs) VcsUtil.getVcsFor(project, file);
-        GitCommand command = new GitCommand(project, vcs.getSettings(), vcsRoot);
-        try {
-            command.move(file, VcsUtil.getVirtualFile(newName));
-        } catch (VcsException ve) {
-            throw new IOException("Error renaming file!", ve);
-        }
+       // Git file is renamed in GitVirtualFileAdaptor.rename() 
     }
 
     @Override

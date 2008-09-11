@@ -18,6 +18,7 @@ package git4idea.actions;
  */
 import git4idea.GitBranch;
 import git4idea.GitVcs;
+import git4idea.GitVirtualFile;
 import git4idea.commands.GitCommand;
 import git4idea.commands.GitCommandRunnable;
 import git4idea.validators.GitBranchNameValidator;
@@ -99,6 +100,8 @@ public class GitCheckout extends BasicAction {
 
     @Override
     protected boolean isEnabled(@NotNull Project project, @NotNull GitVcs vcs, @NotNull VirtualFile... vFiles) {
-        return true;
+        for(VirtualFile file: vFiles)
+            if(vcs.getFileAdapter().isFileProcessable(file)) return true;
+        return false;
     }
 }

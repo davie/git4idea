@@ -183,7 +183,7 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
      * Refresh the current set of changed file (ie: re-check immediately)
      */
     public void refresh() {
-        interrupt();
+          check();
     }
 
     /**
@@ -215,7 +215,7 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
     private void check() {
         Set<VirtualFile> roots = changeMap.keySet();
 
-        threadLock.lock();
+        if(!threadLock.tryLock()) return;   // don't check if one is already in progress...
         try {
             for (VirtualFile root : roots) {
                 GitCommand cmd = new GitCommand(project, settings, root);
@@ -256,7 +256,7 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
             threadLock.unlock();
         }
         
-      changeListManager.scheduleUpdate();
+      changeListManager.scheduleUpdate(true);
     }
 
     public void beforeRootsChange(ModuleRootEvent event) {     // unused

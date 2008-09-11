@@ -19,11 +19,14 @@ package git4idea.actions;
 import git4idea.GitUtil;
 import git4idea.GitVcs;
 import git4idea.GitVcsSettings;
+import git4idea.GitChangeMonitor;
+import git4idea.GitVirtualFile;
 import git4idea.commands.GitCommand;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.*;
 import com.intellij.openapi.vcs.changes.VcsDirtyScopeManager;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.vcsUtil.VcsUtil;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
@@ -49,6 +52,7 @@ public class GitAdd extends BasicAction {
             List<VirtualFile> list = roots.get(root);
             VirtualFile[] vfiles = list.toArray(new VirtualFile[list.size()]);
             command.add(vfiles);
+            vcs.getFileAdapter().ignoreFiles(vfiles, false);
         }
 
         VcsDirtyScopeManager mgr = VcsDirtyScopeManager.getInstance(project);
@@ -56,6 +60,8 @@ public class GitAdd extends BasicAction {
             mgr.fileDirty(file);
             file.refresh(true, true);
         }
+        
+        GitChangeMonitor.getInstance().refresh();
     }
 
     /** Add the specified files to the project.
@@ -70,7 +76,10 @@ public class GitAdd extends BasicAction {
             GitCommand command = new GitCommand(project, GitVcsSettings.getInstance(project), root);
             List<VirtualFile> list = roots.get(root);
             VirtualFile[] vfiles = list.toArray(new VirtualFile[list.size()]);
+            if(vfiles == null || vfiles.length == 0) continue;
             command.add(vfiles);
+            GitVcs vcs = (GitVcs) VcsUtil.getVcsFor(project, vfiles[0]);
+            vcs.getFileAdapter().ignoreFiles(vfiles, false);
         }
 
         VcsDirtyScopeManager mgr = VcsDirtyScopeManager.getInstance(project);
@@ -89,9 +98,9 @@ public class GitAdd extends BasicAction {
     @Override
     protected boolean isEnabled(@NotNull Project project, @NotNull GitVcs vcs, @NotNull VirtualFile... vFiles) {
         for (VirtualFile file : vFiles) {
-            FileStatus fileStatus = FileStatusManager.getInstance(project).getStatus(file);
-            if (fileStatus == FileStatus.NOT_CHANGED || fileStatus == FileStatus.DELETED)
-                return false;
+            if(!vcs.getFileAdapter().isFileProcessable(file)) return false;
+            FileStatus status = FileStatusManager.getInstance(project).getStatus(file);
+            if (status == FileStatus.MODIFIED) return false;
         }
         return true;
     }

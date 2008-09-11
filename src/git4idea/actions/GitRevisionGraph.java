@@ -19,6 +19,7 @@ package git4idea.actions;
 import git4idea.GitFileSystem;
 import git4idea.GitVcs;
 import git4idea.GitUtil;
+import git4idea.GitVirtualFile;
 import git4idea.commands.GitCommand;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.project.Project;
@@ -64,6 +65,8 @@ public class GitRevisionGraph extends BasicAction {
 
     @Override
     protected boolean isEnabled(@NotNull Project project, @NotNull GitVcs vcs, @NotNull VirtualFile... vFiles) {
+        for(VirtualFile file: vFiles)
+            if (!vcs.getFileAdapter().isFileProcessable(file)) return false;
         return true;
     }
 }

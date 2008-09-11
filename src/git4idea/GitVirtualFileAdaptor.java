@@ -29,8 +29,8 @@ import com.intellij.openapi.vfs.VirtualFileCopyEvent;
 import com.intellij.openapi.vfs.VirtualFileEvent;
 import com.intellij.openapi.vfs.VirtualFileMoveEvent;
 import com.intellij.openapi.vfs.VirtualFilePropertyEvent;
-import com.intellij.vcsUtil.VcsUtil;
 import com.intellij.vcsUtil.VcsRunnable;
+import com.intellij.vcsUtil.VcsUtil;
 import git4idea.commands.GitCommand;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -53,8 +53,6 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
     private static final String ADD_MESSAGE = "Add file(s) to Git?\n{0}";
     private static final String DEL_TITLE = "Delete file";
     private static final String DEL_MESSAGE = "Delete file(s) in Git?\n{0}";
-    // always keep git index in sync with file changes (do "git add" on every file save)
-    private boolean doChangeSync = true;
     private Set<VirtualFile> ignoreFiles = new HashSet<VirtualFile>();
     private Set<VirtualFile> knownFiles = new HashSet<VirtualFile>();
 
@@ -65,37 +63,36 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
 
     @Override
     public void beforeContentsChange(@NotNull VirtualFileEvent event) {
-//        final VirtualFile file = event.getFile();
-//        if (!isFileProcessable(file) || knownFile(file))
-//            return;
-//
-//        VcsRunnable cmd = new VcsRunnable() {
-//            public void run() throws VcsException {
-//                VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
-//                if(vcsRoot == null) return;
-//                GitCommand gc = new GitCommand(project, vcs.getSettings(), vcsRoot);
-//                    if (!gc.status(file)) {
-//                        ignoreFile(file, true);
-//                    } else {
-//                        ignoreFile(file, false);
-//                    }
-//            }
-//        };
-//
-//        try {
-//            VcsUtil.runVcsProcessWithProgress(cmd, "Checking Git file status", false, project);
-//        } catch (VcsException e) {
-//        }
+        final VirtualFile file = event.getFile();
+        if (!isFileProcessable(file) || !knownFile(file))
+            return;
+
+        VcsRunnable cmd = new VcsRunnable() {
+            public void run() throws VcsException {
+                VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
+                if (vcsRoot == null) return;
+                GitCommand gc = new GitCommand(project, vcs.getSettings(), vcsRoot);
+                if (!gc.status(file)) {
+                    ignoreFile(file, true);
+                } else {
+                    ignoreFile(file, false);
+                }
+            }
+        };
+
+        try {
+            VcsUtil.runVcsProcessWithProgress(cmd, "Checking Git file status", false, project);
+        } catch (VcsException e) {
+        }
     }
 
     @Override
-    //TODO: add user config option for "Always keep Git index in sync ("git add") with every file save?"
     public void contentsChanged(@NotNull VirtualFileEvent event) {  // keep Git repo in sync
-        if (!doChangeSync || event.isFromRefresh())
+        if (event.isFromRefresh())
             return;
 
         final VirtualFile file = event.getFile();
-        if (!isFileProcessable(file))
+        if (!isFileProcessable(file) || !knownFile(file))
             return;
 
         VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
@@ -109,7 +106,7 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
             GitVcs.getInstance(project).showErrors(es, "Error syncing changes to Git index!");
         }
         statusChange(file);
-        //GitChangeMonitor.getInstance().refresh();
+        GitChangeMonitor.getInstance().refresh();
     }
 
     @Override
@@ -173,7 +170,7 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
             return;
 
         final VirtualFile file = event.getFile();
-        if (!isFileProcessable(file))
+        if (!isFileProcessable(file) || !knownFile(file))
             return;
 
         List<VirtualFile> files = new ArrayList<VirtualFile>();
@@ -194,18 +191,19 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
                 return;
         }
 
-//        VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
-//        if (filesToDelete != null && filesToDelete.size() > 0 && vcsRoot != null) {
-//            GitCommand command = new GitCommand(project, vcs.getSettings(), vcsRoot);
-//            try {
-//                command.delete(filesToDelete.toArray(new VirtualFile[filesToDelete.size()]));
-//            }
-//            catch (VcsException e) {
-//                List<VcsException> es = new ArrayList<VcsException>();
-//                es.add(e);
-//                GitVcs.getInstance(project).showErrors(es, "Error deleting file");
-//            }
-//        }
+        VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
+        if (filesToDelete != null && filesToDelete.size() > 0 && vcsRoot != null) {
+            GitCommand command = new GitCommand(project, vcs.getSettings(), vcsRoot);
+            try {
+                command.delete(filesToDelete.toArray(new VirtualFile[filesToDelete.size()]));
+            }
+            catch (VcsException e) {
+                List<VcsException> es = new ArrayList<VcsException>();
+                es.add(e);
+                GitVcs.getInstance(project).showErrors(es, "Error deleting file");
+            }
+        }
+
     }
 
     @Override
@@ -219,7 +217,7 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
             return;
 
         final VirtualFile file = event.getFile();
-        if (!isFileProcessable(file))
+        if (!isFileProcessable(file) || !knownFile(file))
             return;
 
         VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
@@ -238,6 +236,7 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
             GitVcs.getInstance(project).showErrors(es, "Error moving file");
         }
 
+        GitChangeMonitor.getInstance().refresh();
     }
 
     @Override
@@ -257,15 +256,7 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // LocalOperationsHandler
     public boolean delete(VirtualFile file) throws IOException {
-        VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
-        GitCommand command = new GitCommand(project, vcs.getSettings(), vcsRoot);
-        try {
-            command.delete(new VirtualFile[]{file});
-        }
-        catch (VcsException e) {
-            throw new IOException("Error deleting file!", e);
-        }
-        return true;
+        return false;
     }
 
     public boolean move(VirtualFile file, VirtualFile toDir) throws IOException {
@@ -278,7 +269,19 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
     }
 
     public boolean rename(VirtualFile file, String newName) throws IOException {
-        return false;  //To change body of implemented methods use File | Settings | File Templates.
+        if (newName == null) return false;
+        if (VcsUtil.isPathUnderProject(project, file)) return false;
+
+        VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
+        GitVcs vcs = (GitVcs) VcsUtil.getVcsFor(project, file);
+        if (vcs == null || vcsRoot == null) return false;
+        GitCommand command = new GitCommand(project, vcs.getSettings(), vcsRoot);
+        try {
+            command.move(file, VcsUtil.getVirtualFile(newName));
+            return true;
+        } catch (VcsException ve) {
+            throw new IOException("Error renaming file!", ve);
+        }
     }
 
     public boolean createFile(VirtualFile dir, String name) throws IOException {
@@ -289,6 +292,25 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
         return false;  //To change body of implemented methods use File | Settings | File Templates.
     }
 
+
+    /**
+     * Specify whether or not Git should ignored the given files.
+     * @param files  The files to ignore/not-ignore
+     * @param ignoreMe  true if the files should be ignored, else false
+     */
+    public void ignoreFiles(@NotNull VirtualFile[] files, boolean ignoreMe) {
+        if(files.length == 0) return;
+        for(int i=0; i < files.length; i++) {
+            if(files[i] != null)
+                ignoreFile(files[i], ignoreMe);
+        }
+    }
+
+    /**
+     * Specify whether or not Git should ignored the given file.
+     * @param file The file to ignore/not-ignore
+     * @param ignoreMe  true if the file should be ignored, else false
+     */
     public void ignoreFile(@NotNull VirtualFile file, boolean ignoreMe) {
         if (ignoreMe)
             ignoreFiles.add(file);
@@ -298,8 +320,14 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
         }
     }
 
+    /** Returns true if Git knows about the file, else false. */
     public boolean knownFile(@NotNull VirtualFile file) {
         return knownFiles.contains(file);
+    }
+
+    /** Returns true if Git should ignore the file, else true. */
+    public boolean ignoreFile(@NotNull VirtualFile file) {
+        return ignoreFiles.contains(file);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -312,10 +340,26 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
      * @param file The file to check.
      * @return Returns true of the file can be added.
      */
-    private boolean isFileProcessable(VirtualFile file) {
-        if (file.isDirectory() && file.getName().contains(".git")) return false;
-        return VcsUtil.isFileForVcs(file, project, vcs) && !file.getPath().contains(".git/")
-                && !ignoreFiles.contains(file);
+    public boolean isFileProcessable(VirtualFile file) {
+        if (file.isDirectory() && file.getName().equals(".git")) return false;
+        if (file.getUrl().contains("/.git/")) return false;
+        if (knownFile(file)) return true;
+        if (ignoreFile(file)) return false;
+
+        VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
+        if(vcsRoot == null) {
+            ignoreFile(file);
+            return false;
+        }
+        GitCommand command = new GitCommand(project, vcs.getSettings(), vcsRoot);
+        try {
+            if (command.status(file)) {
+                knownFiles.add(file);
+                return true;
+            }
+        } catch (VcsException e) {
+        }
+        return true;
     }
 
     private void statusChange(@NotNull VirtualFile file) {

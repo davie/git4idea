@@ -19,6 +19,7 @@ package git4idea.actions;
 import git4idea.GitUtil;
 import git4idea.GitVcs;
 import git4idea.GitVcsSettings;
+import git4idea.GitVirtualFile;
 import git4idea.commands.GitCommand;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.AbstractVcs;
@@ -63,6 +64,7 @@ public class GitRevert extends BasicAction {
     @Override
     protected boolean isEnabled(@NotNull Project project, @NotNull GitVcs vcs, @NotNull VirtualFile... vFiles) {
         for (VirtualFile file : vFiles) {
+            if (!vcs.getFileAdapter().isFileProcessable(file)) return false;
             FileStatus status = FileStatusManager.getInstance(project).getStatus(file);
             if (status == FileStatus.UNKNOWN || status == FileStatus.NOT_CHANGED)
                 return false;

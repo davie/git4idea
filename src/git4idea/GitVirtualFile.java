@@ -33,6 +33,7 @@ public class GitVirtualFile extends VirtualFile {
     private final String path;
     private File file;
     private Status status;
+    private String fileSep = System.getProperty("file.separator", "\\");
 
 
     public GitVirtualFile(@NotNull Project project, @NotNull String path, @NotNull Status status) {
@@ -42,8 +43,9 @@ public class GitVirtualFile extends VirtualFile {
 
     public GitVirtualFile(@NotNull Project project, @NotNull String path) {
         this.project = project;
-        this.file = new File(path);
-        this.path = file.getAbsolutePath();
+        String p = path.replace("/", fileSep);
+        this.file = new File(p);
+        this.path = path.replace("\\", "/");
     }
 
     @NotNull
@@ -76,7 +78,7 @@ public class GitVirtualFile extends VirtualFile {
     @NotNull
     public String getUrl() {
         if(path == null) return GitFileSystem.PROTOCOL + "://";
-        return GitFileSystem.PROTOCOL + "://" + path.replace("\\","/");
+        return GitFileSystem.PROTOCOL + "://" + path;
     }
 
     @Override
@@ -156,7 +158,7 @@ public class GitVirtualFile extends VirtualFile {
 
     @Override
     public boolean isInLocalFileSystem() {
-        return true;
+        return file.exists();
     }
 
     @Override
@@ -165,12 +167,12 @@ public class GitVirtualFile extends VirtualFile {
             return false;
 
         GitVirtualFile that = (GitVirtualFile) obj;
-        if(that.project != project) return false;
-        return path.equals(that.path) && file.equals(that.file)
-                && project.equals(that.project) && status.equals(that.status);
+        if(path == null || status == null) return false;
+        return (this == that) || (path.equals(that.path) && status.equals(that.status));
     }
 
     public int hashCode() {
+        if(path == null) return -1;
         return path.hashCode();
     }
 

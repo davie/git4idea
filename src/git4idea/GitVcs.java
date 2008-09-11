@@ -27,31 +27,36 @@ import com.intellij.openapi.options.Configurable;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.Disposer;
-import com.intellij.openapi.vcs.*;
-import com.intellij.openapi.vcs.annotate.AnnotationProvider;
-import com.intellij.openapi.vcs.update.UpdateEnvironment;
-import com.intellij.openapi.vcs.changes.*;
+import com.intellij.openapi.vcs.AbstractVcs;
+import com.intellij.openapi.vcs.FilePath;
+import com.intellij.openapi.vcs.FileStatus;
+import com.intellij.openapi.vcs.FileStatusManager;
+import com.intellij.openapi.vcs.ProjectLevelVcsManager;
+import com.intellij.openapi.vcs.VcsConfiguration;
+import com.intellij.openapi.vcs.VcsException;
+import com.intellij.openapi.vcs.VcsShowConfirmationOption;
+import com.intellij.openapi.vcs.changes.ChangeProvider;
 import com.intellij.openapi.vcs.checkin.CheckinEnvironment;
 import com.intellij.openapi.vcs.diff.DiffProvider;
 import com.intellij.openapi.vcs.diff.RevisionSelector;
 import com.intellij.openapi.vcs.history.VcsHistoryProvider;
 import com.intellij.openapi.vcs.history.VcsRevisionNumber;
 import com.intellij.openapi.vcs.rollback.RollbackEnvironment;
+import com.intellij.openapi.vcs.update.UpdateEnvironment;
+import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
-import com.intellij.openapi.vfs.LocalFileSystem;
-import com.intellij.refactoring.listeners.RefactoringListenerManager;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.*;
+import java.util.Date;
+import java.util.Iterator;
 
 /**
  * Git VCS implementation
  */
 public class GitVcs extends AbstractVcs implements Disposable {
     private static final String GIT = "Git";
-    private static final String UNUNDEXED_FILES_CHANGELIST_NAME = "Unindexed Files";
     private ChangeProvider changeProvider;
     private VcsShowConfirmationOption addConfirmation;
     private VcsShowConfirmationOption delConfirmation;
@@ -60,18 +65,15 @@ public class GitVcs extends AbstractVcs implements Disposable {
     private RollbackEnvironment rollbackEnvironment;
     private GitUpdateEnvironment updateEnvironment;
 
-    private GitAnnotationProvider annotationProvider;    
+    private GitAnnotationProvider annotationProvider;
     private DiffProvider diffProvider;
     private VcsHistoryProvider historyProvider;
-    private GitChangeListListener changeListListener;
-
     private Disposable activationDisposable;
     private final ProjectLevelVcsManager vcsManager;
     private final GitVcsSettings settings;
     private EditorColorsScheme editorColorsScheme;
     private Configurable configurable;
     private RevisionSelector revSelector;
-    private GitRefactoringListenerProvider refactorListener;
     private GitVirtualFileAdaptor gitFileAdapter;
 
     public static GitVcs getInstance(@NotNull Project project) {
@@ -83,7 +85,7 @@ public class GitVcs extends AbstractVcs implements Disposable {
             @NotNull final GitChangeProvider gitChangeProvider,
             @NotNull final GitCheckinEnvironment gitCheckinEnvironment,
             @NotNull final ProjectLevelVcsManager gitVcsManager,
-            @NotNull final GitAnnotationProvider gitAnnotationProvider,            
+            @NotNull final GitAnnotationProvider gitAnnotationProvider,
             @NotNull final GitDiffProvider gitDiffProvider,
             @NotNull final GitHistoryProvider gitHistoryProvider,
             @NotNull final GitRollbackEnvironment gitRollbackEnvironment,
@@ -96,7 +98,7 @@ public class GitVcs extends AbstractVcs implements Disposable {
         delConfirmation = gitVcsManager.getStandardConfirmation(VcsConfiguration.StandardConfirmation.REMOVE, this);
         changeProvider = gitChangeProvider;
         checkinEnvironment = gitCheckinEnvironment;
-        annotationProvider = gitAnnotationProvider;        
+        annotationProvider = gitAnnotationProvider;
         diffProvider = gitDiffProvider;
         editorColorsScheme = EditorColorsManager.getInstance().getGlobalScheme();
         historyProvider = gitHistoryProvider;
@@ -104,13 +106,9 @@ public class GitVcs extends AbstractVcs implements Disposable {
         revSelector = new GitRevisionSelector();
         configurable = new GitVcsConfigurable(settings, myProject);
         updateEnvironment = new GitUpdateEnvironment(myProject, settings, configurable);
-        changeListListener = new GitChangeListListener(myProject);
 
         ((GitCheckinEnvironment) checkinEnvironment).setProject(myProject);
         ((GitCheckinEnvironment) checkinEnvironment).setSettings(settings);
-
-        refactorListener = new GitRefactoringListenerProvider();
-
     }
 
     @Override
@@ -159,7 +157,7 @@ public class GitVcs extends AbstractVcs implements Disposable {
     public GitAnnotationProvider getAnnotationProvider() {
         return annotationProvider;
     }
-    
+
     @Override
     @NotNull
     public DiffProvider getDiffProvider() {
@@ -212,8 +210,8 @@ public class GitVcs extends AbstractVcs implements Disposable {
             public void dispose() {
             }
         };
-        gitFileAdapter = new  GitVirtualFileAdaptor(this, myProject);
-        VirtualFileManager.getInstance().addVirtualFileListener(gitFileAdapter,activationDisposable);
+        gitFileAdapter = new GitVirtualFileAdaptor(this, myProject);
+        VirtualFileManager.getInstance().addVirtualFileListener(gitFileAdapter, activationDisposable);
         LocalFileSystem.getInstance().registerAuxiliaryFileOperationsHandler(gitFileAdapter);
         GitChangeMonitor mon = GitChangeMonitor.getInstance(settings.GIT_INTERVAL);
         mon.setProject(myProject);
@@ -224,8 +222,8 @@ public class GitVcs extends AbstractVcs implements Disposable {
     @Override
     public void deactivate() {
         super.deactivate();
-        if(gitFileAdapter != null)
-        LocalFileSystem.getInstance().unregisterAuxiliaryFileOperationsHandler(gitFileAdapter);
+        if (gitFileAdapter != null)
+            LocalFileSystem.getInstance().unregisterAuxiliaryFileOperationsHandler(gitFileAdapter);
         VirtualFileManager.getInstance().removeVirtualFileListener(gitFileAdapter);
         assert activationDisposable != null;
         Disposer.dispose(activationDisposable);
@@ -289,7 +287,32 @@ public class GitVcs extends AbstractVcs implements Disposable {
         assert activationDisposable == null;
     }
 
-    GitVirtualFileAdaptor getFileAdapter() {
+    public GitVirtualFileAdaptor getFileAdapter() {
         return gitFileAdapter;
     }
+
+    /**
+     * Returns true if the specified file path is located under a directory which is managed by this VCS.
+     * This method is called only for directories which are mapped to this VCS in the project configuration.
+     *
+     * @param filePath the path to check.
+     * @return true if the path is managed by this VCS, false otherwise.
+     */
+    public boolean fileIsUnderVcs(FilePath filePath) {
+       if((filePath == null) || filePath.getPath().contains("/.git/")) return false;
+        return true;
+    }
+
+    /**
+     * Returns true if the specified file path represents a file which exists in the VCS repository (is neither
+     * unversioned nor scheduled for addition).
+     * This method is called only for directories which are mapped to this VCS in the project configuration.
+     *
+     * @param path the path to check.
+     * @return true if the corresponding file exists in the repository, false otherwise.
+     */
+    public boolean fileExistsInVcs(FilePath path) {
+        GitVirtualFile file = new GitVirtualFile(myProject, path.getPath());
+        return gitFileAdapter.isFileProcessable(file) && gitFileAdapter.knownFile(file);
+  }
 }
