@@ -29,8 +29,6 @@ import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.vcs.AbstractVcs;
 import com.intellij.openapi.vcs.FilePath;
-import com.intellij.openapi.vcs.FileStatus;
-import com.intellij.openapi.vcs.FileStatusManager;
 import com.intellij.openapi.vcs.ProjectLevelVcsManager;
 import com.intellij.openapi.vcs.VcsConfiguration;
 import com.intellij.openapi.vcs.VcsException;
@@ -46,6 +44,8 @@ import com.intellij.openapi.vcs.update.UpdateEnvironment;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
+import com.intellij.refactoring.listeners.RefactoringElementListenerProvider;
+import com.intellij.refactoring.listeners.RefactoringListenerManager;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -75,6 +75,7 @@ public class GitVcs extends AbstractVcs implements Disposable {
     private Configurable configurable;
     private RevisionSelector revSelector;
     private GitVirtualFileAdaptor gitFileAdapter;
+    private RefactoringElementListenerProvider renameListenerProvider;
 
     public static GitVcs getInstance(@NotNull Project project) {
         return (GitVcs) ProjectLevelVcsManager.getInstance(project).findVcsByName(GIT);
@@ -109,6 +110,7 @@ public class GitVcs extends AbstractVcs implements Disposable {
 
         ((GitCheckinEnvironment) checkinEnvironment).setProject(myProject);
         ((GitCheckinEnvironment) checkinEnvironment).setSettings(settings);
+        renameListenerProvider = new GitRefactoringListenerProvider();
     }
 
     @Override
@@ -213,6 +215,7 @@ public class GitVcs extends AbstractVcs implements Disposable {
         gitFileAdapter = new GitVirtualFileAdaptor(this, myProject);
         VirtualFileManager.getInstance().addVirtualFileListener(gitFileAdapter, activationDisposable);
         LocalFileSystem.getInstance().registerAuxiliaryFileOperationsHandler(gitFileAdapter);
+        RefactoringListenerManager.getInstance(myProject).addListenerProvider(renameListenerProvider);
         GitChangeMonitor mon = GitChangeMonitor.getInstance(settings.GIT_INTERVAL);
         mon.setProject(myProject);
         mon.setGitVcsSettings(settings);
@@ -222,8 +225,8 @@ public class GitVcs extends AbstractVcs implements Disposable {
     @Override
     public void deactivate() {
         super.deactivate();
-        if (gitFileAdapter != null)
-            LocalFileSystem.getInstance().unregisterAuxiliaryFileOperationsHandler(gitFileAdapter);
+        LocalFileSystem.getInstance().unregisterAuxiliaryFileOperationsHandler(gitFileAdapter);
+        RefactoringListenerManager.getInstance(myProject).removeListenerProvider(renameListenerProvider);
         VirtualFileManager.getInstance().removeVirtualFileListener(gitFileAdapter);
         assert activationDisposable != null;
         Disposer.dispose(activationDisposable);
@@ -299,8 +302,12 @@ public class GitVcs extends AbstractVcs implements Disposable {
      * @return true if the path is managed by this VCS, false otherwise.
      */
     public boolean fileIsUnderVcs(FilePath filePath) {
-       if((filePath == null) || filePath.getPath().contains("/.git/")) return false;
-        return true;
+        if (filePath == null) return false;
+        String pathName = filePath.getPath();
+        if (pathName.contains("\\.git\\") || pathName.contains("/.git/"))
+            return false;
+        else
+            return true;
     }
 
     /**
@@ -314,5 +321,5 @@ public class GitVcs extends AbstractVcs implements Disposable {
     public boolean fileExistsInVcs(FilePath path) {
         GitVirtualFile file = new GitVirtualFile(myProject, path.getPath());
         return gitFileAdapter.isFileProcessable(file) && gitFileAdapter.knownFile(file);
-  }
+    }
 }

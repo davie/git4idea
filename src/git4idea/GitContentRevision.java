@@ -23,6 +23,7 @@ import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vcs.changes.ContentRevision;
 import com.intellij.openapi.vcs.history.VcsRevisionNumber;
+import com.intellij.vcsUtil.VcsUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -30,13 +31,13 @@ import org.jetbrains.annotations.Nullable;
  * Git content revision
  */
 public class GitContentRevision implements ContentRevision {
-    private FilePath file;
+    private GitVirtualFile file;
     private GitRevisionNumber revision;
     private Project project;
 
-    public GitContentRevision(@NotNull FilePath filePath, @NotNull GitRevisionNumber revision, @NotNull Project project) {
+    public GitContentRevision(@NotNull GitVirtualFile vfile, @NotNull GitRevisionNumber revision, @NotNull Project project) {
         this.project = project;
-        this.file = filePath;
+        this.file = vfile;
         this.revision = revision;
     }
 
@@ -56,7 +57,7 @@ public class GitContentRevision implements ContentRevision {
     @Override
     @NotNull
     public FilePath getFile() {
-        return file;
+        return VcsUtil.getFilePath(file.getFile());
     }
 
     @Override

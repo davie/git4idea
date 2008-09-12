@@ -19,7 +19,6 @@ package git4idea;
 
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.FileStatus;
 import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vcs.changes.*;
@@ -31,7 +30,6 @@ import java.util.Collection;
 import java.util.Date;
 
 import org.jetbrains.annotations.NotNull;
-import git4idea.commands.GitCommand;
 
 /**
  * Git repository change provide
@@ -62,14 +60,15 @@ public class GitChangeProvider implements ChangeProvider {
     }
 
     private void getChange(ChangelistBuilder builder, VirtualFile file) {
-        FilePath path = VcsUtil.getFilePath(file.getPath());
+        if(builder == null || file == null) return;
+        GitVirtualFile gvFile = (GitVirtualFile) file;
         VirtualFile vfile = VcsUtil.getVirtualFile(file.getPath());
-        ContentRevision beforeRev = null;
-        if (file != null)
-            beforeRev = new GitContentRevision(path, new GitRevisionNumber(GitRevisionNumber.TIP, new Date(file.getModificationStamp())), project);
-        ContentRevision afterRev = CurrentContentRevision.create(path);
+        ContentRevision beforeRev = new GitContentRevision(gvFile, new GitRevisionNumber(
+                GitRevisionNumber.TIP, new Date(gvFile.getModificationStamp())), project);
+        ContentRevision afterRev = new GitContentRevision(gvFile, new GitRevisionNumber(
+                GitRevisionNumber.TIP, new Date(gvFile.getModificationStamp())), project);
 
-        switch (((GitVirtualFile)file).getStatus()) {
+        switch (gvFile.getStatus()) {
             case UNMERGED: {
                 builder.processChange(
                         new Change(beforeRev, afterRev, FileStatus.MERGED_WITH_CONFLICTS));

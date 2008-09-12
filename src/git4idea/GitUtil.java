@@ -18,6 +18,8 @@ package git4idea;
  */
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.FilePath;
+import com.intellij.openapi.vcs.ProjectLevelVcsManager;
+import com.intellij.openapi.vcs.VcsRoot;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.vcsUtil.VcsUtil;
 import org.jetbrains.annotations.NotNull;
@@ -40,10 +42,18 @@ public class GitUtil {
 
     @NotNull
     public static VirtualFile getVcsRoot(@NotNull final Project project, final VirtualFile virtualFile) {
-        VirtualFile vfile = VcsUtil.getVcsRootFor(project, virtualFile);
-        if (vfile == null)
-            vfile = project.getBaseDir();
-        return vfile;
+        assert virtualFile != null;
+        String vpath = virtualFile.getPath();
+        ProjectLevelVcsManager mgr = ProjectLevelVcsManager.getInstance( project );
+        VcsRoot[] vroots = mgr.getAllVcsRoots();
+        for(VcsRoot vroot : vroots) {
+            if(vroot == null) continue;
+            String rootpath = vroot.path.getPath();
+            if(vpath.startsWith(rootpath))
+                return vroot.path;
+        }
+
+        return virtualFile;
     }
 
     @NotNull
@@ -53,7 +63,7 @@ public class GitUtil {
         Map<VirtualFile, List<VirtualFile>> result = new HashMap<VirtualFile, List<VirtualFile>>();
 
         for (VirtualFile file : virtualFiles) {
-            final VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
+            final VirtualFile vcsRoot =  getVcsRoot(project, file);
             assert vcsRoot != null;
 
             List<VirtualFile> files = result.get(vcsRoot);

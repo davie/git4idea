@@ -277,13 +277,12 @@ public class GitChangeMonitor extends Thread implements ModuleRootListener {
     private Change[] getChanges(Collection<VirtualFile> files) {
         Collection<Change> changes = new ArrayList<Change>();
         for (VirtualFile file : files) {
-            FilePath path = VcsUtil.getFilePath(file.getPath());
-            ContentRevision beforeRev = null;
-            if (file != null)
-                beforeRev = new GitContentRevision(path, new GitRevisionNumber(GitRevisionNumber.TIP, new Date(file.getModificationStamp())), project);
-            ContentRevision afterRev = CurrentContentRevision.create(path);
+            if (file == null) continue;
+            GitVirtualFile gvFile = (GitVirtualFile) file;
+            ContentRevision beforeRev = new GitContentRevision(gvFile, new GitRevisionNumber(GitRevisionNumber.TIP, new Date(file.getModificationStamp())), project);
+            ContentRevision afterRev = beforeRev;
 
-            switch (((GitVirtualFile) file).getStatus()) {
+            switch (gvFile.getStatus()) {
                 case UNMERGED: {
                     changes.add(new Change(beforeRev, afterRev, FileStatus.MERGED_WITH_CONFLICTS));
                     break;

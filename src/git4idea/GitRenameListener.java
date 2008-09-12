@@ -22,6 +22,7 @@ import com.intellij.openapi.ui.Messages;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.refactoring.listeners.RefactoringElementListener;
+import com.intellij.vcsUtil.VcsUtil;
 import git4idea.commands.GitCommand;
 
 import java.io.File;
@@ -37,27 +38,30 @@ public class GitRenameListener implements RefactoringElementListener {
     GitRenameListener(String oldFilename, PsiElement elem) {
         originalFilename = oldFilename;
         project = elem.getProject();
-        vcsRoot = project.getBaseDir();
+        vcsRoot = VcsUtil.getVcsRootFor(project, new GitVirtualFile(project,oldFilename));
     }
 
     public void elementRenamed(PsiElement newElement) {
+        if(newElement == null) return;
         // IDEA has already moved the file at this point...
-//        GitCommand cmd = new GitCommand(project, GitVcsSettings.getInstance(project), vcsRoot);
-//        VirtualFile newFile = newElement.getContainingFile().getVirtualFile();
-//        File newLoc = new File(newFile.getPath());
-//        File oldLoc = new File(originalFilename);
-//        try {
-//            newLoc.renameTo(oldLoc);  // move back, let Git do the move
-//           //cmd.move(originalFilename, newFile.getPath());
-//        } catch (SecurityException se) {
-//            Messages.showErrorDialog(project, se.getMessage(), "Unable to move file, permission denied.");
-//        } catch (VcsException ve) {
-//            Messages.showErrorDialog(project, ve.getMessage(), "Error during 'git mv'");
-//        }
+        GitCommand cmd = new GitCommand(project, GitVcsSettings.getInstance(project), vcsRoot);
+        VirtualFile newFile = newElement.getContainingFile().getVirtualFile();
+        File newLoc = new File(newFile.getPath());
+        File oldLoc = new File(originalFilename);
+        try {
+            if(newLoc.exists() && !oldLoc.exists()) // file already moved in local fs
+                newLoc.renameTo(oldLoc);  // move back, let Git do the move
+            cmd.move(new GitVirtualFile(project,originalFilename), newFile);
+        } catch (SecurityException se) {
+            Messages.showErrorDialog(project, se.getMessage(), "Unable to rename file, permission denied.");
+        } catch (VcsException ve) {
+            Messages.showErrorDialog(project, ve.getMessage(), "Error during rename ('git mv')");
+        }
+        GitChangeMonitor.getInstance().refresh();
     }
 
     public void elementMoved(PsiElement newElement) {
-        // not implemented due to IDEA bug(?) - doesn't pass any info about old element to listener provider
+        // implemented in GitVirtualFileAdaptor
     }
 
 

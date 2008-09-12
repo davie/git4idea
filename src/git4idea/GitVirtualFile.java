@@ -141,6 +141,10 @@ public class GitVirtualFile extends VirtualFile {
         return file.lastModified();
     }
 
+    public File getFile() {
+        return file;
+    }
+
     @Override
     public long getLength() {
         return file.length();

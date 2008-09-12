@@ -9,12 +9,9 @@ package git4idea;
  * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
  * the specific language governing permissions and limitations under the License.
  *
- * Copyright 2007 Decentrix Inc
- * Copyright 2007 Aspiro AS
  * Copyright 2008 MQSoftware
- * Authors: gevession, Erlend Simonsen & Mark Scott
+ * Authors: Mark Scott
  *
- * This code was originally derived from the MKS & Mercurial IDEA VCS plugins
  */
 
 import com.intellij.openapi.project.Project;
@@ -83,6 +80,7 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
         try {
             VcsUtil.runVcsProcessWithProgress(cmd, "Checking Git file status", false, project);
         } catch (VcsException e) {
+            e.printStackTrace();
         }
     }
 
@@ -96,6 +94,7 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
             return;
 
         VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
+        if(vcsRoot == null) return;
         GitCommand command = new GitCommand(project, vcs.getSettings(), vcsRoot);
         try {
             command.add(new VirtualFile[]{event.getFile()});
@@ -204,6 +203,7 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
             }
         }
 
+        GitChangeMonitor.getInstance().refresh();
     }
 
     @Override
@@ -221,6 +221,7 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
             return;
 
         VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
+        if(vcsRoot == null) return;
         GitCommand command = new GitCommand(project, vcs.getSettings(), vcsRoot);
         try {
             String oldPath = event.getOldParent().getPath();
@@ -260,12 +261,12 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
     }
 
     public boolean move(VirtualFile file, VirtualFile toDir) throws IOException {
-        return false;  //To change body of implemented methods use File | Settings | File Templates.
+        return true;
     }
 
     @Nullable
     public File copy(VirtualFile file, VirtualFile toDir, String copyName) throws IOException {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+        return null;
     }
 
     public boolean rename(VirtualFile file, String newName) throws IOException {
@@ -277,7 +278,7 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
         if (vcs == null || vcsRoot == null) return false;
         GitCommand command = new GitCommand(project, vcs.getSettings(), vcsRoot);
         try {
-            command.move(file, VcsUtil.getVirtualFile(newName));
+            command.move(file, new GitVirtualFile(project,newName));
             return true;
         } catch (VcsException ve) {
             throw new IOException("Error renaming file!", ve);
@@ -285,11 +286,11 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
     }
 
     public boolean createFile(VirtualFile dir, String name) throws IOException {
-        return false;  //To change body of implemented methods use File | Settings | File Templates.
+        return false;
     }
 
     public boolean createDirectory(VirtualFile dir, String name) throws IOException {
-        return false;  //To change body of implemented methods use File | Settings | File Templates.
+        return false;
     }
 
 
@@ -300,9 +301,9 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
      */
     public void ignoreFiles(@NotNull VirtualFile[] files, boolean ignoreMe) {
         if(files.length == 0) return;
-        for(int i=0; i < files.length; i++) {
-            if(files[i] != null)
-                ignoreFile(files[i], ignoreMe);
+        for (VirtualFile file : files) {
+            if (file != null)
+                ignoreFile(file, ignoreMe);
         }
     }
 
@@ -320,12 +321,22 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
         }
     }
 
-    /** Returns true if Git knows about the file, else false. */
+    /**
+     * Query if Git knows about a file.
+     *
+     * @param file The file to query
+     * @return true if git knows the file, else false
+     */
     public boolean knownFile(@NotNull VirtualFile file) {
         return knownFiles.contains(file);
     }
 
-    /** Returns true if Git should ignore the file, else true. */
+     /**
+     * Query if Git should ignore a file.
+     *
+     * @param file The file to query
+     * @return true if git is ignoring the file, else false
+     */
     public boolean ignoreFile(@NotNull VirtualFile file) {
         return ignoreFiles.contains(file);
     }
@@ -358,6 +369,7 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
                 return true;
             }
         } catch (VcsException e) {
+            return false;
         }
         return true;
     }

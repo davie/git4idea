@@ -20,6 +20,7 @@ import git4idea.GitUtil;
 import git4idea.GitVcs;
 import git4idea.GitVcsSettings;
 import git4idea.GitVirtualFile;
+import git4idea.GitChangeMonitor;
 import git4idea.commands.GitCommand;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.AbstractVcs;
@@ -53,6 +54,8 @@ public class GitRevert extends BasicAction {
             mgr.fileDirty(file);
             file.refresh(true, true);
         }
+
+        GitChangeMonitor.getInstance().refresh();
     }
 
     @Override

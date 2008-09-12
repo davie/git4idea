@@ -17,22 +17,26 @@ package git4idea;
  * This code was originally derived from the MKS & Mercurial IDEA VCS plugins
  */
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vcs.changes.Change;
+import com.intellij.openapi.vcs.changes.VcsDirtyScopeManager;
+import com.intellij.openapi.vcs.changes.ContentRevision;
 import com.intellij.openapi.vcs.rollback.RollbackEnvironment;
 import com.intellij.openapi.vfs.VirtualFile;
 
 import java.util.List;
+import java.util.Map;
+import java.util.ArrayList;
+import java.util.LinkedList;
 
 import org.jetbrains.annotations.NotNull;
+import git4idea.commands.GitCommand;
 
 /**
  * Git rollback/revert environment
  */
 public class GitRollbackEnvironment implements RollbackEnvironment {
-    //TODO: implement this whole class!!
     private final Project project;
 
     public GitRollbackEnvironment(@NotNull Project project) {
@@ -47,24 +51,48 @@ public class GitRollbackEnvironment implements RollbackEnvironment {
 
     @Override
     public List<VcsException> rollbackModifiedWithoutCheckout(@NotNull List<VirtualFile> files) {
-        Messages.showInfoMessage(project, "rollbackModifiedWithoutCheckout", "Revert");
-        return null;
+       List<VcsException> exceptions = new LinkedList<VcsException>();
+        final Map<VirtualFile, List<VirtualFile>> roots = GitUtil.sortFilesByVcsRoot(project, files);
+        for (VirtualFile root : roots.keySet()) {
+            GitCommand command = new GitCommand(project, GitVcsSettings.getInstance(project), root);
+            List<VirtualFile> rfiles = roots.get(root);
+            try {
+                command.revert(rfiles.toArray(new VirtualFile[rfiles.size()]));
+            } catch (VcsException e) {
+                exceptions.add(e);
+            }
+        }
+
+        VcsDirtyScopeManager mgr = VcsDirtyScopeManager.getInstance(project);
+        for (VirtualFile file : files) {
+            mgr.fileDirty(file);
+            file.refresh(true, true);
+        }
+
+        GitChangeMonitor.getInstance().refresh();
+        return exceptions;
     }
 
     @Override
     public List<VcsException> rollbackMissingFileDeletion(@NotNull List<FilePath> files) {
-        Messages.showInfoMessage(project, "rollbackMissingFileDeletion", "Revert");
         return null;
     }
 
     @Override
     public void rollbackIfUnchanged(@NotNull VirtualFile file) {
-        Messages.showInfoMessage(project, "rollbackIfUnchanged", "Revert");
     }
 
     @Override
     public List<VcsException> rollbackChanges(@NotNull List<Change> changes) {
-        Messages.showInfoMessage(project, "rollbackChanges", "Rollback");
-        return null;
+        List<VirtualFile> affectedFiles = new ArrayList<VirtualFile>(changes.size());
+        for(Change change: changes) {
+            ContentRevision rev = change.getAfterRevision() != null ? change.getAfterRevision(): change.getBeforeRevision();
+            if(rev == null) continue;
+            FilePath fp = rev.getFile();
+            GitVirtualFile file = new GitVirtualFile(project, fp.getPath());
+            affectedFiles.add(file);
+        }
+
+        return rollbackModifiedWithoutCheckout(affectedFiles);
     }
 }
