@@ -1035,6 +1035,10 @@ public class GitCommand {
             out.close();
             String output = convertStreamToString(new ByteArrayInputStream(buf));
 
+            // empty repo with no commits yet...
+            if(output != null && output.contains("No HEAD commit to compare with"))
+                return null;
+
             if (proc.exitValue() != 0)
                 throw new VcsException(output);
 
