@@ -69,10 +69,12 @@ import java.util.concurrent.locks.ReentrantLock;
 @SuppressWarnings({"ResultOfMethodCallIgnored"})
 public class GitCommand {
     public final static boolean DEBUG = false;
-    public static final int BUF_SIZE = 64 * 16;  // 16KB
-
+    public static final int BUF_SIZE = 16 * 1024;  // 16KB
+    public static final int MAX_BUF_ALLOWED = 128 * 1024 * 1024; //128MB (who'll ever need to edit a file that big??? :-)
+    public static final String EMPTY_STRING = "";
     /* Git/VCS commands */
     private static final String ADD_CMD = "add";
+    private static final String ANNOTATE_CMD = "annotate";
     private static final String BRANCH_CMD = "branch";
     public static final String CHECKOUT_CMD = "checkout";
     public static final String CLONE_CMD = "clone";
@@ -355,6 +357,7 @@ public class GitCommand {
         //SimpleDateFormat df = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
         try {
             while ((line = in.readLine()) != null) {
+                if(line.length() == 0) continue;
                 String[] values = line.split("@@@");
                 Date commitDate = new Date(Long.valueOf(values[2]) * 1000);
                 //String revstr = df.format(commitDate) + " [" + values[0] + "]";
@@ -856,16 +859,16 @@ public class GitCommand {
      */
     public GitFileAnnotation annotate(FilePath filePath) throws VcsException {
         String[] options = new String[]{"-l", "--"};
-
         String[] args = new String[]{getRelativeFilePath(filePath.getPath(), vcsRoot)};
 
-        String cmdOutput = execute("annotate", options, args);
-        BufferedReader in = new BufferedReader(new StringReader(cmdOutput));
         GitFileAnnotation annotation = new GitFileAnnotation(project);
+        String cmdOutput = execute(ANNOTATE_CMD, options, args);
+        if(cmdOutput == null || cmdOutput.length() == 0) return annotation;
 
+        BufferedReader in = new BufferedReader(new StringReader(cmdOutput));
         SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z");
-
         String Line;
+        int lineCount = 0;
         try {
             while ((Line = in.readLine()) != null) {
                 String annValues[] = Line.split("\t", 4);
@@ -877,14 +880,16 @@ public class GitCommand {
                 String user = annValues[1];
                 String dateStr = annValues[2];
                 String numberedLine = annValues[3];
-
+                lineCount++;
+                
                 if (revision.length() != 40) {
                     throw new VcsException("Framing error: Illegal revision number: " + revision);
                 }
 
                 int idx = numberedLine.indexOf(')');
                 if (!user.startsWith("(") || idx <= 0) {
-                    throw new VcsException("Framing error: unexpected format");
+                    continue;
+                    //throw new VcsException("Framing error: unexpected format");
                 }
                 user = user.substring(1).trim(); // Ditch the (
                 Long lineNumber = Long.valueOf(numberedLine.substring(0, idx));
@@ -920,18 +925,18 @@ public class GitCommand {
         return rfile.substring(baseDir.getPath().length() + 1);
     }
 
-    private String execute(String cmd, String arg) throws VcsException {
+    private String execute(@NotNull String cmd, String arg) throws VcsException {
         return execute(cmd, null, arg);
     }
 
-    private String execute(String cmd, String oneOption, String[] args) throws VcsException {
+    private String execute(@NotNull String cmd, String oneOption, String[] args) throws VcsException {
         String[] options = new String[1];
         options[0] = oneOption;
 
         return execute(cmd, options, args);
     }
 
-    private String execute(String cmd, String option, String arg) throws VcsException {
+    private String execute(@NotNull String cmd, String option, String arg) throws VcsException {
         String[] options = null;
         if (option != null) {
             options = new String[1];
@@ -946,7 +951,7 @@ public class GitCommand {
         return execute(cmd, options, args);
     }
 
-    private String execute(String cmd, String[] options, String[] args) throws VcsException {
+    private String execute(@NotNull String cmd, String[] options, String[] args) throws VcsException {
         List<String> cmdLine = new ArrayList<String>();
         if (options != null) {
             for (String opt : options) {
@@ -963,31 +968,37 @@ public class GitCommand {
         return execute(cmd, cmdLine);
     }
 
-    private String execute(String cmd) throws VcsException {
+    private String execute(@NotNull String cmd) throws VcsException {
         return execute(cmd, Collections.<String>emptyList());
     }
 
-    private String execute(String cmd, List<String> cmdArgs) throws VcsException {
+    private String execute(@NotNull String cmd, List<String> cmdArgs) throws VcsException {
         return execute(cmd, cmdArgs, false);
     }
 
-    private String execute(String cmd, boolean silent) throws VcsException {
+    private String execute(@NotNull String cmd, boolean silent) throws VcsException {
         return execute(cmd, (List<String>) null, silent);
     }
 
-    private String execute(String cmd, String[] cmdArgs, boolean silent) throws VcsException {
+    private String execute(@NotNull String cmd, String[] cmdArgs, boolean silent) throws VcsException {
         return execute(cmd, Arrays.asList(cmdArgs), silent);
     }
 
-    private String execute(String cmd, List<String> cmdArgs, boolean silent) throws VcsException {
+    private String execute(@NotNull String cmd, List<String> cmdArgs, boolean silent) throws VcsException {
+        int bufsize = BUF_SIZE;
         List<String> cmdLine = new ArrayList<String>();
         cmdLine.add(settings.GIT_EXECUTABLE);
         cmdLine.add(cmd);
         if (cmdArgs != null) {
+
             for (String arg : cmdArgs) {
                 if (arg != null)
                     cmdLine.add(arg);
             }
+        }
+
+        if(cmd.equals(SHOW_CMD) || cmd.equals(ANNOTATE_CMD)) {
+            bufsize = BUF_SIZE * 8; // start with bigger buffer when getting contents of files
         }
 
         File directory = VfsUtil.virtualToIoFile(vcsRoot);
@@ -1016,31 +1027,39 @@ public class GitCommand {
 
             // Get the output from the process.
             BufferedInputStream in = new BufferedInputStream(proc.getInputStream());
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
 
-            byte[] buf = new byte[BUF_SIZE];
-            int l;
-            while ((l = in.read(buf)) != -1) {
-                out.write(buf, 0, l);
+            byte[] workBuf = new byte[bufsize];
+            byte[] retBuf = new byte[bufsize];
+            int rlen=in.read(workBuf);   // length of current read
+            int wpos=0; // total count of all bytes read (also write position in retBuf)
+            while (rlen != -1) {
+                if((wpos + rlen) > retBuf.length) {  // handle *big* output....
+                    if((retBuf.length * 2) >= MAX_BUF_ALLOWED )
+                        throw new VcsException("Git command output limit exceeded, cannot process!");
+                    byte[] newbuf = new byte[ retBuf.length * 2 ];
+                    System.arraycopy(retBuf, 0, newbuf, 0, wpos);
+                    retBuf = newbuf;
+                }
+                System.arraycopy(workBuf, 0, retBuf, wpos, rlen);
+                wpos+=rlen;
+                rlen=in.read(workBuf);
             }
 
             try {
                 proc.waitFor();
             } catch (InterruptedException ie) {
-                return null;
+                return EMPTY_STRING;
             }
-            buf = out.toByteArray();
-
             in.close();
-            out.close();
-            String output = convertStreamToString(new ByteArrayInputStream(buf));
 
-            // empty repo with no commits yet...
-            if(output != null && output.contains("No HEAD commit to compare with"))
-                return null;
-
+            if(wpos == 0) return EMPTY_STRING;
+            String output = new String(retBuf,0, wpos);
             if (proc.exitValue() != 0)
                 throw new VcsException(output);
+
+            // empty repo with no commits yet...
+            if(output != null && cmd.equals(DIFF_CMD) && output.contains("No HEAD commit to compare with"))
+                return EMPTY_STRING;
 
             return output;
         }
@@ -1099,32 +1118,6 @@ public class GitCommand {
 
     public int exitCode() {
         return proc.exitValue();
-    }
-
-    @SuppressWarnings({"EmptyCatchBlock"})
-    private String convertStreamToString(InputStream in) throws VcsException {
-        BufferedReader reader = new BufferedReader(new InputStreamReader(in));
-        StringBuffer sbuff = new StringBuffer(BUF_SIZE);
-
-        int count;
-        char[] buf = new char[BUF_SIZE];
-        try {
-            while ((count = reader.read(buf, 0, BUF_SIZE)) != -1) {
-                sbuff.append(new String(buf, 0, count));
-            }
-            reader.close();
-            reader = null;
-        }
-        catch (IOException e) {
-            throw new VcsException(e);
-        } finally {
-            if (reader != null)
-                try {
-                    reader.close();
-                } catch (IOException e) {
-                }
-        }
-        return sbuff.toString();
     }
 
     /**
