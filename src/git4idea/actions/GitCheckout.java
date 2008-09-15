@@ -100,8 +100,6 @@ public class GitCheckout extends BasicAction {
 
     @Override
     protected boolean isEnabled(@NotNull Project project, @NotNull GitVcs vcs, @NotNull VirtualFile... vFiles) {
-        for(VirtualFile file: vFiles)
-            if(vcs.getFileAdapter().isFileProcessable(file)) return true;
-        return false;
+        return true;
     }
 }

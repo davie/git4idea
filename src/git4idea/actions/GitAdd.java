@@ -97,11 +97,9 @@ public class GitAdd extends BasicAction {
 
     @Override
     protected boolean isEnabled(@NotNull Project project, @NotNull GitVcs vcs, @NotNull VirtualFile... vFiles) {
-        for (VirtualFile file : vFiles) {
-            if(!vcs.getFileAdapter().isFileProcessable(file)) return false;
-            FileStatus status = FileStatusManager.getInstance(project).getStatus(file);
-            if (status == FileStatus.MODIFIED) return false;
-        }
+        for (VirtualFile file : vFiles)
+            return !vcs.getFileAdapter().isFileProcessable(file);
+        
         return true;
     }
 }

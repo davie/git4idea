@@ -61,19 +61,12 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
     @Override
     public void beforeContentsChange(@NotNull VirtualFileEvent event) {
         final VirtualFile file = event.getFile();
-        if (!isFileProcessable(file) || !knownFile(file))
+        if (!isFileProcessable(file))
             return;
 
         VcsRunnable cmd = new VcsRunnable() {
             public void run() throws VcsException {
-                VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
-                if (vcsRoot == null || knownFile(file) || !isFileProcessable(file)) return;
-                GitCommand gc = new GitCommand(project, vcs.getSettings(), vcsRoot);
-                if (!gc.status(file)) {
-                    ignoreFile(file, true);
-                } else {
-                    ignoreFile(file, false);
-                }
+                isFileProcessable(file);
             }
         };
 
@@ -90,7 +83,7 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
             return;
 
         final VirtualFile file = event.getFile();
-        if (!isFileProcessable(file) || !knownFile(file))
+        if (!isFileProcessable(file))
             return;
 
         VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
@@ -169,7 +162,7 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
             return;
 
         final VirtualFile file = event.getFile();
-        if (!isFileProcessable(file) || !knownFile(file))
+        if (!isFileProcessable(file))
             return;
 
         List<VirtualFile> files = new ArrayList<VirtualFile>();
@@ -217,7 +210,7 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
             return;
 
         final VirtualFile file = event.getFile();
-        if (!isFileProcessable(file) || !knownFile(file))
+        if (!isFileProcessable(file))
             return;
 
         VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
@@ -321,16 +314,6 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
         }
     }
 
-    /**
-     * Query if Git knows about a file.
-     *
-     * @param file The file to query
-     * @return true if git knows the file, else false
-     */
-    public boolean knownFile(@NotNull VirtualFile file) {
-        return knownFiles.contains(file);
-    }
-
      /**
      * Query if Git should ignore a file.
      *
@@ -351,27 +334,37 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
      * @param file The file to check.
      * @return Returns true of the file can be added.
      */
-    public boolean isFileProcessable(VirtualFile file) {
-        if (file.isDirectory() && file.getName().equals(".git")) return false;
-        if (file.getUrl().contains("/.git/")) return false;
-        if (knownFile(file)) return true;
-        if (ignoreFile(file)) return false;
+    public boolean isFileProcessable(@NotNull VirtualFile file) {
+        if (knownFiles.contains(file)) return true;
+        if (ignoreFiles.contains(file)) return false;
+
+        if (file.isDirectory() && file.getName().equals(".git")) {
+            ignoreFiles.add(file);
+            return false;
+        }
+        if (file.getUrl().contains("/.git/")){
+            ignoreFiles.add(file);
+            return false;
+        }
 
         VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
         if(vcsRoot == null) {
-            ignoreFile(file);
+            ignoreFiles.add(file);
             return false;
         }
+
         GitCommand command = new GitCommand(project, vcs.getSettings(), vcsRoot);
         try {
-            if (command.status(file)) {
+            if(command.status(file)) {
                 knownFiles.add(file);
                 return true;
+            } else {
+                ignoreFiles.add(file);
+                return false;
             }
         } catch (VcsException e) {
             return false;
         }
-        return true;
     }
 
     private void statusChange(@NotNull VirtualFile file) {

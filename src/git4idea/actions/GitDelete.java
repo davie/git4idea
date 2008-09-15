@@ -91,11 +91,8 @@ public class GitDelete extends BasicAction {
     @Override
     protected boolean isEnabled(@NotNull Project project, @NotNull GitVcs vcs, @NotNull VirtualFile... vFiles) {
         GitVirtualFileAdaptor fa = vcs.getFileAdapter();
-        for (VirtualFile file : vFiles) {
-            if(!fa.isFileProcessable(file)) return false;
-            if (fa.isFileProcessable(file) && (!fa.knownFile(file)) )
-                return false;
-        }
+        for (VirtualFile file : vFiles)
+            return fa.isFileProcessable(file);
 
         return true;
     }

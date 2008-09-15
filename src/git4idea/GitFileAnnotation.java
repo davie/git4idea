@@ -36,7 +36,6 @@ public class GitFileAnnotation implements FileAnnotation {
   private final List<LineInfo> myLineInfos = new ArrayList<LineInfo>();
   private static final SyncDateFormat DATE_FORMAT = new SyncDateFormat(SimpleDateFormat.getDateInstance(SimpleDateFormat.SHORT));
 
-  private final Project project;
   private final List<AnnotationListener> myListeners = new ArrayList<AnnotationListener>();
   private final Map<VcsRevisionNumber, VcsFileRevision> myRevisionMap = new HashMap<VcsRevisionNumber, VcsFileRevision>();
 
@@ -94,7 +93,6 @@ public class GitFileAnnotation implements FileAnnotation {
 
 
   public GitFileAnnotation(final Project project) {
-     this.project = project;
   }
 
   public void addListener(AnnotationListener listener) {
@@ -156,16 +154,6 @@ public class GitFileAnnotation implements FileAnnotation {
      }
 
      public void doAction(int lineNum) {
-         //TODO: none of this does anything useful... What's the point?
-
-        //if (lineNum >= 0 && lineNum < myLineInfos.size()) {
-           //final LineInfo info = myLineInfos.get(lineNum);
-           //VcsFileRevision fileRevision = myRevisionMap.get(info.getRevision());
-           //if (fileRevision != null) {
-             // System.out.println("GitFileAnnotation$RevisionAnnotationAspect.doAction");
-            //TODO? ShowAllSubmittedFilesAction.showSubmittedFiles(project, fileRevision);
-           //}
-        //}
      }
   }
 
