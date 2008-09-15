@@ -67,7 +67,7 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
         VcsRunnable cmd = new VcsRunnable() {
             public void run() throws VcsException {
                 VirtualFile vcsRoot = VcsUtil.getVcsRootFor(project, file);
-                if (vcsRoot == null || ignoreFile(file)) return;
+                if (vcsRoot == null || knownFile(file) || !isFileProcessable(file)) return;
                 GitCommand gc = new GitCommand(project, vcs.getSettings(), vcsRoot);
                 if (!gc.status(file)) {
                     ignoreFile(file, true);
