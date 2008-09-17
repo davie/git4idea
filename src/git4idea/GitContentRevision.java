@@ -22,20 +22,28 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vcs.changes.ContentRevision;
+import com.intellij.openapi.vcs.changes.CurrentContentRevision;
 import com.intellij.openapi.vcs.history.VcsRevisionNumber;
+import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.vcsUtil.VcsUtil;
+import com.intellij.peer.PeerFactory;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
  * Git content revision
  */
-public class GitContentRevision implements ContentRevision {
+public class GitContentRevision extends CurrentContentRevision  {
     private GitVirtualFile file;
     private GitRevisionNumber revision;
     private Project project;
 
+    public GitContentRevision(final FilePath file) {
+        super(file);
+    }
+
     public GitContentRevision(@NotNull GitVirtualFile vfile, @NotNull GitRevisionNumber revision, @NotNull Project project) {
+        super(PeerFactory.getInstance().getVcsContextFactory().createFilePathOn(vfile));
         this.project = project;
         this.file = vfile;
         this.revision = revision;
@@ -43,22 +51,17 @@ public class GitContentRevision implements ContentRevision {
 
     @Override
     @Nullable
-    public String getContent() throws VcsException {
-        if (file == null || file.isDirectory()) return null;
+    public String getContent()  {
+        if (file == null || revision == null) return super.getContent();
 
         GitCommand command = new GitCommand(
                 project,
                 GitVcsSettings.getInstance(project),
-                GitUtil.getVcsRoot(project, file));
+                GitUtil.getVcsRoot(project,file));
 
         return command.getContents(file.getPath(), revision.getRev());
     }
 
-    @Override
-    @NotNull
-    public FilePath getFile() {
-        return VcsUtil.getFilePath(file.getFile());
-    }
 
     @Override
     @NotNull

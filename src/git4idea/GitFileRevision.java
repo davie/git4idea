@@ -110,4 +110,8 @@ public class GitFileRevision implements VcsFileRevision,Comparable<VcsFileRevisi
             return revision.compareTo(((GitFileRevision)rev).revision);
         return getRevisionDate().compareTo(rev.getRevisionDate());
     }
+
+    public FilePath getFilePath(){
+        return path;
+    }
 }

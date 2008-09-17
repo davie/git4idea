@@ -16,6 +16,7 @@ package git4idea;
  *
  * This code was originally derived from the MKS & Mercurial IDEA VCS plugins
  */
+
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.ProjectLevelVcsManager;
@@ -24,7 +25,11 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.vcsUtil.VcsUtil;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Git utility/helper methods
@@ -35,25 +40,25 @@ public class GitUtil {
     public static VirtualFile getVcsRoot(@NotNull final Project project, @NotNull final FilePath filePath) {
         VirtualFile vfile = VcsUtil.getVcsRootFor(project, filePath);
         if (vfile == null)
-            vfile = GitFileSystem.getInstance().findFileByPath(project,filePath.getPath());
+            vfile = GitFileSystem.getInstance().findFileByPath(project, filePath.getPath());
 
         return vfile;
     }
 
     @NotNull
-    public static VirtualFile getVcsRoot(@NotNull final Project project, final VirtualFile virtualFile) {
-        assert virtualFile != null;
+    public static VirtualFile getVcsRoot(@NotNull final Project project, @NotNull final VirtualFile virtualFile) {
         String vpath = virtualFile.getPath();
-        ProjectLevelVcsManager mgr = ProjectLevelVcsManager.getInstance( project );
+        ProjectLevelVcsManager mgr = ProjectLevelVcsManager.getInstance(project);
         VcsRoot[] vroots = mgr.getAllVcsRoots();
-        for(VcsRoot vroot : vroots) {
-            if(vroot == null) continue;
+        for (VcsRoot vroot : vroots) {
+            if (vroot == null) continue;
             String rootpath = vroot.path.getPath();
-            if(vpath.startsWith(rootpath))
+            if (vpath.startsWith(rootpath))
                 return vroot.path;
         }
 
-        return virtualFile;
+        // best guess....
+        return vroots[0].path;
     }
 
     @NotNull
@@ -63,7 +68,7 @@ public class GitUtil {
         Map<VirtualFile, List<VirtualFile>> result = new HashMap<VirtualFile, List<VirtualFile>>();
 
         for (VirtualFile file : virtualFiles) {
-            final VirtualFile vcsRoot =  getVcsRoot(project, file);
+            final VirtualFile vcsRoot = getVcsRoot(project, file);
             assert vcsRoot != null;
 
             List<VirtualFile> files = result.get(vcsRoot);

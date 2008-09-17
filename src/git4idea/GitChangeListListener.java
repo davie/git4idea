@@ -28,7 +28,7 @@ import java.util.Collection;
 public class GitChangeListListener implements ChangeListListener {
 
     public GitChangeListListener(Project project) {
-        ChangeListManager.getInstance(project).addChangeListListener(this);
+        //ChangeListManager.getInstance(project).addChangeListListener(this);
     }
     
     public void changeListAdded(ChangeList list) {

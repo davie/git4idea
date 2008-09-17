@@ -20,14 +20,18 @@ package git4idea.commands;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.FilePath;
+import com.intellij.openapi.vcs.FileStatus;
 import com.intellij.openapi.vcs.VcsException;
+import com.intellij.openapi.vcs.changes.Change;
+import com.intellij.openapi.vcs.changes.ContentRevision;
 import com.intellij.openapi.vcs.changes.VcsDirtyScopeManager;
 import com.intellij.openapi.vcs.history.VcsFileRevision;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.EnvironmentUtil;
+import com.intellij.vcsUtil.VcsUtil;
 import git4idea.GitBranch;
-import git4idea.GitChangeMonitor;
+import git4idea.GitContentRevision;
 import git4idea.GitFileAnnotation;
 import git4idea.GitFileRevision;
 import git4idea.GitRevisionNumber;
@@ -40,18 +44,16 @@ import org.jetbrains.annotations.NotNull;
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.StringReader;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
@@ -97,6 +99,7 @@ public class GitCommand {
     public static final String STASH_CMD = "stash";
     public static final String MERGETOOL_CMD = "mergetool";
     public static final String STATUS_CMD = "ls-files";
+    private static final String DIFF_TREE_CMD = "diff-tree";
 
     /* Misc Git constants */
     private static final String HEAD = "HEAD";
@@ -128,7 +131,6 @@ public class GitCommand {
         this.opts = opts;
         this.args = args;
     }
-
 
     public void setCommand(String cmd) {
         this.cmd = cmd;
@@ -252,8 +254,8 @@ public class GitCommand {
      * @return The set of all changed files
      * @throws VcsException If an error occurs
      */
-    public Set<VirtualFile> changedFiles() throws VcsException {
-        Set<VirtualFile> files = new HashSet<VirtualFile>();
+    public Set<GitVirtualFile> changedFiles() throws VcsException {
+        Set<GitVirtualFile> files = new HashSet<GitVirtualFile>();
         String output;
         List<String> args = new ArrayList<String>();
         args.add("--cached");
@@ -307,10 +309,7 @@ public class GitCommand {
      * @return The contents of the revision as a String.
      * @throws VcsException If the load of the file fails.
      */
-    public String getContents(String path, String revision) throws VcsException {
-        if (path == null || path.equals(""))
-            throw new VcsException("Invalid file path specified!");
-
+    public String getContents(@NotNull String path, String revision) {
         StringBuffer revCmd = new StringBuffer();
         if (revision != null) {
             if (revision.length() > 40)       // this is the date & revision-id encoded string
@@ -323,7 +322,11 @@ public class GitCommand {
         }
 
         String vcsPath = revCmd.append(getRelativeFilePath(path, vcsRoot)).toString();
-        return execute(SHOW_CMD, Collections.singletonList(vcsPath), true);
+        try {
+            return execute(SHOW_CMD, Collections.singletonList(vcsPath), true);
+        } catch (VcsException e) {
+            return "";
+        }
     }
 
     /**
@@ -357,7 +360,7 @@ public class GitCommand {
         //SimpleDateFormat df = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
         try {
             while ((line = in.readLine()) != null) {
-                if(line.length() == 0) continue;
+                if (line.length() == 0) continue;
                 String[] values = line.split("@@@");
                 Date commitDate = new Date(Long.valueOf(values[2]) * 1000);
                 //String revstr = df.format(commitDate) + " [" + values[0] + "]";
@@ -482,7 +485,6 @@ public class GitCommand {
             add(files); // add current snapshot to index first..
             String result = execute(COMMIT_CMD, options, args);  // now commit the files
             GitVcs.getInstance(project).showMessages(result);
-            GitChangeMonitor.getInstance().refresh();
 
             VcsDirtyScopeManager mgr = VcsDirtyScopeManager.getInstance(project);
             for (VirtualFile file : files) {
@@ -863,7 +865,7 @@ public class GitCommand {
 
         GitFileAnnotation annotation = new GitFileAnnotation(project);
         String cmdOutput = execute(ANNOTATE_CMD, options, args);
-        if(cmdOutput == null || cmdOutput.length() == 0) return annotation;
+        if (cmdOutput == null || cmdOutput.length() == 0) return annotation;
 
         BufferedReader in = new BufferedReader(new StringReader(cmdOutput));
         SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z");
@@ -881,7 +883,7 @@ public class GitCommand {
                 String dateStr = annValues[2];
                 String numberedLine = annValues[3];
                 lineCount++;
-                
+
                 if (revision.length() != 40) {
                     throw new VcsException("Framing error: Illegal revision number: " + revision);
                 }
@@ -905,6 +907,86 @@ public class GitCommand {
             throw new VcsException("Failed to load annotations", e);
         }
         return annotation;
+    }
+
+    /**
+     * Builds collection of changed files for a given commit.
+     *
+     * @param commitId Long commit id.
+     * @return Collection of changed files.
+     * @throws VcsException if an error occurs
+     */
+    public Collection<Change> getChangesForCommit(String commitId) throws VcsException {
+        final ArrayList<Change> result = new ArrayList<Change>();
+
+        String[] options = new String[]{"-r", "--root", "--pretty=format:%P"}; // Show parent commit if it present
+        String[] args = new String[]{commitId};
+
+        String cmdOutput = execute(DIFF_TREE_CMD, options, args);
+        final String[] changes = cmdOutput.split("\n");
+
+        if (changes.length == 0) {
+            return result;
+        }
+
+        GitRevisionNumber parentCommit = null;
+        String parentCommitId = changes[0];
+        // First line in the output should be id of parent commit. In case if this line is empty it means that commit is initial and has no any parent commit.
+
+        // If so - then given commit could only add files, no change/move/delete allowed. Later we check that such commit has only ADDED file statuses.
+        if (parentCommitId.length() > 0) {
+            parentCommit = new GitRevisionNumber(parentCommitId);
+        }
+
+        for (int i = 1; i < changes.length; i++) {
+            String gitChnage = changes[i];
+            if (gitChnage.length() == 0)
+                continue;
+
+            // format for gitChange is following
+            // :000000 100644 0000000000000000000000000000000000000000 984ca539b1c469fb2bbd6d6e26fe5fcd25ab76f1 A	src/git4idea/GitRefactoringListenerProvider.java
+            final String[] tokens = gitChnage.split("[ \t]");
+            assert tokens.length > 5;
+            final String blogIdBefore = tokens[2];
+            final String blobIdAfter = tokens[3];
+            final GitVirtualFile.Status status = convertStatus(tokens[4].substring(0, 1));
+            final String pathArg1 = vcsRoot.getPath() + "/" + tokens[5];
+            final String pathArg2 = tokens.length > 6 ? (vcsRoot.getPath() + "/" + tokens[6]) : null;
+
+            ContentRevision before = null;
+            ContentRevision after = null;
+            FileStatus fileStatus = null;
+
+            switch (status) {
+                case MODIFIED:
+                    assert parentCommit != null;
+                    GitVirtualFile gitFile = new GitVirtualFile(project, pathArg1);
+                    before = new GitContentRevision(gitFile, parentCommit, project);
+                    after = new GitContentRevision(gitFile, new GitRevisionNumber(commitId), project);
+                    fileStatus = FileStatus.MODIFIED;
+                    break;
+                case COPY:
+                case RENAME:
+                    assert parentCommit != null;
+                    before = new GitContentRevision(new GitVirtualFile(project, pathArg1), parentCommit, project);
+                    after = new GitContentRevision(new GitVirtualFile(project, pathArg2), new GitRevisionNumber(commitId), project);
+                    fileStatus = FileStatus.MODIFIED;
+                    break;
+                case ADDED:
+                    after = new GitContentRevision(new GitVirtualFile(project, pathArg1), new GitRevisionNumber(commitId), project);
+                    fileStatus = FileStatus.ADDED;
+                    break;
+                case DELETED:
+                    assert parentCommit != null;
+                    before = new GitContentRevision(new GitVirtualFile(project, pathArg1), parentCommit, project);
+                    fileStatus = FileStatus.DELETED;
+                    break;
+            }
+
+            result.add(new Change(before, after, fileStatus));
+        }
+
+        return result;
     }
 
     /////////////////////////////////////////////////////////////////////////////////////////////
@@ -997,7 +1079,7 @@ public class GitCommand {
             }
         }
 
-        if(cmd.equals(SHOW_CMD) || cmd.equals(ANNOTATE_CMD)) {
+        if (cmd.equals(SHOW_CMD) || cmd.equals(ANNOTATE_CMD)) {
             bufsize = BUF_SIZE * 8; // start with bigger buffer when getting contents of files
         }
 
@@ -1030,19 +1112,19 @@ public class GitCommand {
 
             byte[] workBuf = new byte[bufsize];
             byte[] retBuf = new byte[bufsize];
-            int rlen=in.read(workBuf);   // length of current read
-            int wpos=0; // total count of all bytes read (also write position in retBuf)
+            int rlen = in.read(workBuf);   // length of current read
+            int wpos = 0; // total count of all bytes read (also write position in retBuf)
             while (rlen != -1) {
-                if((wpos + rlen) > retBuf.length) {  // handle *big* output....
-                    if((retBuf.length * 2) >= MAX_BUF_ALLOWED )
+                if ((wpos + rlen) > retBuf.length) {  // handle *big* output....
+                    if ((retBuf.length * 2) >= MAX_BUF_ALLOWED)
                         throw new VcsException("Git command output limit exceeded, cannot process!");
-                    byte[] newbuf = new byte[ retBuf.length * 2 ];
+                    byte[] newbuf = new byte[retBuf.length * 2];
                     System.arraycopy(retBuf, 0, newbuf, 0, wpos);
                     retBuf = newbuf;
                 }
                 System.arraycopy(workBuf, 0, retBuf, wpos, rlen);
-                wpos+=rlen;
-                rlen=in.read(workBuf);
+                wpos += rlen;
+                rlen = in.read(workBuf);
             }
 
             try {
@@ -1052,13 +1134,13 @@ public class GitCommand {
             }
             in.close();
 
-            if(wpos == 0) return EMPTY_STRING;
-            String output = new String(retBuf,0, wpos);
+            if (wpos == 0) return EMPTY_STRING;
+            String output = new String(retBuf, 0, wpos);
             if (proc.exitValue() != 0)
                 throw new VcsException(output);
 
             // empty repo with no commits yet...
-            if(output != null && cmd.equals(DIFF_CMD) && output.contains("No HEAD commit to compare with"))
+            if (output != null && cmd.equals(DIFF_CMD) && output.contains("No HEAD commit to compare with"))
                 return EMPTY_STRING;
 
             return output;

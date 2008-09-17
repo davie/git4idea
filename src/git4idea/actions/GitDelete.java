@@ -29,7 +29,6 @@ import git4idea.GitUtil;
 import git4idea.GitVcs;
 import git4idea.GitVcsSettings;
 import git4idea.GitVirtualFileAdaptor;
-import git4idea.GitChangeMonitor;
 import git4idea.commands.GitCommand;
 import org.jetbrains.annotations.NotNull;
 
@@ -63,7 +62,6 @@ public class GitDelete extends BasicAction {
             file.refresh(true, true);
         }
 
-         GitChangeMonitor.getInstance().refresh();
     }
 
     public static void deleteFiles(@NotNull Project project, @NotNull VirtualFile[] files) throws VcsException {

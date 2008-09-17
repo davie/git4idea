@@ -31,6 +31,7 @@ import java.io.*;
 public class GitVirtualFile extends VirtualFile {
     private final Project project;
     private final String path;
+    private final String URL;
     private File file;
     private Status status;
     private String fileSep = System.getProperty("file.separator", "\\");
@@ -45,7 +46,8 @@ public class GitVirtualFile extends VirtualFile {
         this.project = project;
         String p = path.replace("/", fileSep);
         this.file = new File(p);
-        this.path = path.replace("\\", "/");
+        this.path = this.file.getAbsolutePath().replace("\\", "/");
+        this.URL = "file://" + this.path;
     }
 
     @NotNull
@@ -60,7 +62,7 @@ public class GitVirtualFile extends VirtualFile {
     @Override
     @NotNull
     public String getName() {
-        return path.substring(path.lastIndexOf("/"));
+        return file.getName();
     }
 
     @Override
@@ -77,8 +79,7 @@ public class GitVirtualFile extends VirtualFile {
     @Override
     @NotNull
     public String getUrl() {
-        if(path == null) return GitFileSystem.PROTOCOL + "://";
-        return GitFileSystem.PROTOCOL + "://" + path;
+        return URL;
     }
 
     @Override
@@ -167,21 +168,24 @@ public class GitVirtualFile extends VirtualFile {
 
     @Override
     public boolean equals(Object obj) {
-        if (!(obj instanceof GitVirtualFile))
+        if (!(obj instanceof VirtualFile))
             return false;
 
-        GitVirtualFile that = (GitVirtualFile) obj;
-        if(path == null || status == null) return false;
-        return (this == that) || (path.equals(that.path) && status.equals(that.status));
+        VirtualFile that = (VirtualFile) obj;
+        return this == that || getUrl().equals(that.getUrl());
     }
 
     public int hashCode() {
         if(path == null) return -1;
-        return path.hashCode();
+        return getUrl().hashCode();
     }
 
     public String toString() {
         return getUrl();
+    }
+
+    Project getProject() {
+        return project;
     }
 
     public enum Status {

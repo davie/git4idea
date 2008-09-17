@@ -57,7 +57,6 @@ public class GitRenameListener implements RefactoringElementListener {
         } catch (VcsException ve) {
             Messages.showErrorDialog(project, ve.getMessage(), "Error during rename ('git mv')");
         }
-        GitChangeMonitor.getInstance().refresh();
     }
 
     public void elementMoved(PsiElement newElement) {

@@ -9,7 +9,7 @@ package git4idea;
  * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
  * the specific language governing permissions and limitations under the License.
  *
- * Author: Anatol Pomazu
+ * Author: Anatol Pomozov (Copyright 2008)
  */
 import com.intellij.CommonBundle;
 import org.jetbrains.annotations.NonNls;

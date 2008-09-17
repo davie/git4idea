@@ -32,7 +32,7 @@ import com.intellij.openapi.vcs.history.VcsHistoryProvider;
 import com.intellij.openapi.vcs.history.VcsHistorySession;
 import com.intellij.openapi.vcs.history.VcsRevisionNumber;
 import com.intellij.util.ui.ColumnInfo;
-import com.intellij.vcsUtil.VcsUtil;
+import git4idea.actions.ShowAllSubmittedFilesAction;
 import git4idea.commands.GitCommand;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -62,9 +62,9 @@ public class GitHistoryProvider implements VcsHistoryProvider {
     }
 
     @Override
-    public AnAction[] getAdditionalActions(FileHistoryPanel panel) {
-        return new AnAction[0];
-    }
+     public AnAction[] getAdditionalActions(FileHistoryPanel panel) {
+            return new AnAction[]{new ShowAllSubmittedFilesAction()};
+     }
 
     @Override
     public boolean isDateOmittable() {

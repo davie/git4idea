@@ -69,7 +69,6 @@ public class GitRollbackEnvironment implements RollbackEnvironment {
             file.refresh(true, true);
         }
 
-        GitChangeMonitor.getInstance().refresh();
         return exceptions;
     }
 

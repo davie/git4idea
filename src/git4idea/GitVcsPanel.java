@@ -37,7 +37,6 @@ public class GitVcsPanel {
     private JButton testButton;
     private JComponent panel;
     private TextFieldWithBrowseButton gitField;
-    private JSpinner intervalSpinner;
     private Project project;
 
     public GitVcsPanel(@NotNull Project project) {
@@ -80,22 +79,13 @@ public class GitVcsPanel {
 
     public void load(@NotNull GitVcsSettings settings) {
         gitField.setText(settings.GIT_EXECUTABLE);
-        intervalSpinner.setValue(settings.GIT_INTERVAL);
     }
 
     public boolean isModified(@NotNull GitVcsSettings settings) {
-        return !settings.GIT_EXECUTABLE.equals(gitField.getText()) ||
-                !settings.GIT_INTERVAL.equals(intervalSpinner.getValue());
+        return !settings.GIT_EXECUTABLE.equals(gitField.getText());
     }
 
     public void save(@NotNull GitVcsSettings settings) {
         settings.GIT_EXECUTABLE = gitField.getText();
-        Integer val = (Integer) intervalSpinner.getValue();
-        if (val < 10)
-            settings.GIT_INTERVAL = 10;
-        else
-            settings.GIT_INTERVAL = val;
-
-       GitChangeMonitor.getInstance().setGitVcsSettings(settings);
     }
 }

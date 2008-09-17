@@ -37,7 +37,6 @@ public class GitUpdateSession implements UpdateSession {
     }
 
     public void onRefreshFilesCompleted() {
-        GitChangeMonitor.getInstance().refresh();
     }
 
     public boolean isCanceled() {
