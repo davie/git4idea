@@ -8,9 +8,10 @@
 
         NOTE: Not compatible with IDEA v8, a new version of Git4Idea will likely ship with the final IDEA v8.
     </description>
-    <change-notes>Version 1.4 fixes *lots* of bugs as well as greatly enhances performance and stability. Full support
-        for refactoring is also included. Current users are strongly encouraged to update to this version.</change-notes>
-    <version>1.4</version>
+    <change-notes>Version 1.5 fixes several bugs as well as greatly enhances performance and stability. An intermittent
+        IDEA deadlock that some users were experiencing in v1.4 is also fixed. Current users are strongly encouraged to
+        update to this version.</change-notes>
+    <version>1.5</version>
     <vendor url="http://github.com/markscott/git4idea/tree/master" email="mscott@mqsoftware.com">MQSoftware</vendor>
     <idea-version since-build="5000" until-build="7999"/>
     <application-components>
