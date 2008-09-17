@@ -43,7 +43,7 @@ import java.util.Set;
 /**
  * Git virtual file adapter
  */
-public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFileOperationsHandler {
+public class GitVirtualFileAdapter extends VirtualFileAdapter implements LocalFileOperationsHandler {
     private Project project;
     private GitVcs vcs;
     private static final String ADD_TITLE = "Add file";
@@ -53,7 +53,7 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
     private Set<String> ignoreFiles = new HashSet<String>();
     private Set<String> knownFiles = new HashSet<String>();
 
-    public GitVirtualFileAdaptor(@NotNull GitVcs vcs, @NotNull Project project) {
+    public GitVirtualFileAdapter(@NotNull GitVcs vcs, @NotNull Project project) {
         this.vcs = vcs;
         this.project = project;
     }
@@ -91,8 +91,7 @@ public class GitVirtualFileAdaptor extends VirtualFileAdapter implements LocalFi
             return;
 
         final VirtualFile file = event.getFile();
-        if (!isFileProcessable(file))
-            return;
+        if(!VcsUtil.isFileForVcs(file, project, vcs)) return;
 
         List<VirtualFile> files = new ArrayList<VirtualFile>();
         files.add(file);

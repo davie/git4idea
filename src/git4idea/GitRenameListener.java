@@ -20,7 +20,6 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.psi.PsiElement;
-import com.intellij.psi.PsiFile;
 import com.intellij.refactoring.listeners.RefactoringElementListener;
 import com.intellij.vcsUtil.VcsUtil;
 import git4idea.commands.GitCommand;
@@ -60,7 +59,7 @@ public class GitRenameListener implements RefactoringElementListener {
     }
 
     public void elementMoved(PsiElement newElement) {
-        // implemented in GitVirtualFileAdaptor
+        // implemented in GitVirtualFileAdapter
     }
 
 

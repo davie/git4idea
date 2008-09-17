@@ -19,8 +19,6 @@ package git4idea.actions;
 
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.AbstractVcs;
-import com.intellij.openapi.vcs.FileStatus;
-import com.intellij.openapi.vcs.FileStatusManager;
 import com.intellij.openapi.vcs.ProjectLevelVcsManager;
 import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vcs.changes.VcsDirtyScopeManager;
@@ -28,7 +26,7 @@ import com.intellij.openapi.vfs.VirtualFile;
 import git4idea.GitUtil;
 import git4idea.GitVcs;
 import git4idea.GitVcsSettings;
-import git4idea.GitVirtualFileAdaptor;
+import git4idea.GitVirtualFileAdapter;
 import git4idea.commands.GitCommand;
 import org.jetbrains.annotations.NotNull;
 
@@ -88,7 +86,7 @@ public class GitDelete extends BasicAction {
 
     @Override
     protected boolean isEnabled(@NotNull Project project, @NotNull GitVcs vcs, @NotNull VirtualFile... vFiles) {
-        GitVirtualFileAdaptor fa = vcs.getFileAdapter();
+        GitVirtualFileAdapter fa = vcs.getFileAdapter();
         for (VirtualFile file : vFiles)
             return fa.isFileProcessable(file);
 

@@ -74,7 +74,7 @@ public class GitVcs extends AbstractVcs implements Disposable {
     private EditorColorsScheme editorColorsScheme;
     private Configurable configurable;
     private RevisionSelector revSelector;
-    private GitVirtualFileAdaptor gitFileAdapter;
+    private GitVirtualFileAdapter gitFileAdapter;
     private RefactoringElementListenerProvider renameListenerProvider;
 
     public static GitVcs getInstance(@NotNull Project project) {
@@ -212,7 +212,7 @@ public class GitVcs extends AbstractVcs implements Disposable {
             public void dispose() {
             }
         };
-        gitFileAdapter = new GitVirtualFileAdaptor(this, myProject);
+        gitFileAdapter = new GitVirtualFileAdapter(this, myProject);
         VirtualFileManager.getInstance().addVirtualFileListener(gitFileAdapter, activationDisposable);
         LocalFileSystem.getInstance().registerAuxiliaryFileOperationsHandler(gitFileAdapter);
         RefactoringListenerManager.getInstance(myProject).addListenerProvider(renameListenerProvider);
@@ -290,7 +290,7 @@ public class GitVcs extends AbstractVcs implements Disposable {
         assert activationDisposable == null;
     }
 
-    public GitVirtualFileAdaptor getFileAdapter() {
+    public GitVirtualFileAdapter getFileAdapter() {
         return gitFileAdapter;
     }
 

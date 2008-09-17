@@ -18,17 +18,13 @@ package git4idea;
  */
 
 import com.intellij.openapi.vcs.vfs.VcsFileSystem;
-import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.project.Project;
-import com.intellij.vcsUtil.VcsUtil;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.io.IOException;
-
-import git4idea.commands.GitCommand;
 
 /**
  * Git VCS filesystem implementation
@@ -114,12 +110,12 @@ public class GitFileSystem extends VcsFileSystem {
 
     @Override
     public void deleteFile(Object requestor, VirtualFile file) throws IOException {
-        // Git delete happens in GitVirtualFileAdaptor.beforeFileDeletion()
+        // Git delete happens in GitVirtualFileAdapter.beforeFileDeletion()
     }
 
     @Override
     public void moveFile(Object requestor, VirtualFile vFile, VirtualFile newParent) throws IOException {
-        // Git file is moved in GitVirtualFileAdaptor.beforeFileMovement()
+        // Git file is moved in GitVirtualFileAdapter.beforeFileMovement()
     }
 
     @Override
@@ -129,7 +125,7 @@ public class GitFileSystem extends VcsFileSystem {
 
     @Override
     public void renameFile(Object requestor, VirtualFile file, String newName) throws IOException {
-       // Git file is renamed in GitVirtualFileAdaptor.rename() 
+       // Git file is renamed in GitVirtualFileAdapter.rename()
     }
 
     @Override
