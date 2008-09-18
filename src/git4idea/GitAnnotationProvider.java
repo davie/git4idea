@@ -92,6 +92,6 @@ public class GitAnnotationProvider implements AnnotationProvider {
     }
 
     public boolean isAnnotationValid(VcsFileRevision rev) {
-        return false;
+        return (rev instanceof GitFileRevision);
     }
 }
