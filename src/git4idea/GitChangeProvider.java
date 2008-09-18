@@ -21,13 +21,11 @@ import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.FileStatus;
 import com.intellij.openapi.vcs.VcsException;
-import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.changes.Change;
 import com.intellij.openapi.vcs.changes.ChangeListManager;
 import com.intellij.openapi.vcs.changes.ChangeProvider;
 import com.intellij.openapi.vcs.changes.ChangelistBuilder;
 import com.intellij.openapi.vcs.changes.ContentRevision;
-import com.intellij.openapi.vcs.changes.LocalChangeList;
 import com.intellij.openapi.vcs.changes.VcsDirtyScope;
 import com.intellij.openapi.vcs.changes.CurrentContentRevision;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -35,10 +33,8 @@ import com.intellij.vcsUtil.VcsUtil;
 import git4idea.commands.GitCommand;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
-import java.util.List;
 import java.util.Set;
 
 /**
@@ -60,7 +56,7 @@ public class GitChangeProvider implements ChangeProvider {
 
         for (VirtualFile root : roots) {
             GitCommand command = new GitCommand(project, settings, root);
-            Set<GitVirtualFile> files = command.changedFiles();
+            Set<GitVirtualFile> files = command.gitCachedFiles();
             for (GitVirtualFile file : files) {
                 Change c = getChange(file);
                 if(c != null)
@@ -68,6 +64,7 @@ public class GitChangeProvider implements ChangeProvider {
             }
         }
         clmgr.scheduleUpdate(true);
+        GitChangeMonitor.getInstance().setBuilder(builder);
     }
 
     @Override

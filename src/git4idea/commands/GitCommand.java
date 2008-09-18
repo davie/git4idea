@@ -29,7 +29,6 @@ import com.intellij.openapi.vcs.history.VcsFileRevision;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.EnvironmentUtil;
-import com.intellij.vcsUtil.VcsUtil;
 import git4idea.GitBranch;
 import git4idea.GitContentRevision;
 import git4idea.GitFileAnnotation;
@@ -249,12 +248,12 @@ public class GitCommand {
     }
 
     /**
-     * Returns a set of all changed files under this VCS root.
+     * Returns a set of all changed Git files cached into the Git index under this VCS root.
      *
      * @return The set of all changed files
      * @throws VcsException If an error occurs
      */
-    public Set<GitVirtualFile> changedFiles() throws VcsException {
+    public Set<GitVirtualFile> gitCachedFiles() throws VcsException {
         Set<GitVirtualFile> files = new HashSet<GitVirtualFile>();
         String output;
         List<String> args = new ArrayList<String>();
@@ -263,11 +262,6 @@ public class GitCommand {
         args.add("--diff-filter=ADMRUX");
         args.add("--");
         output = execute(DIFF_CMD, args, true);
-
-        //TODO: tie to user config option for "Always keep Git index in sync ("git add") with every file save?"
-        // Look for files not cached in the Git index yet
-        // args.remove(0);
-        // output += execute(DIFF_CMD, args, true);
 
         StringTokenizer tokenizer;
         if (output != null && output.length() > 0) {
@@ -278,28 +272,72 @@ public class GitCommand {
                 final String s = tokenizer.nextToken();
                 String[] larr = s.split("\t");
                 if (larr.length == 2) {
-                    GitVirtualFile file = new GitVirtualFile(project, getBasePath() + File.separator + larr[1], convertStatus(larr[0]));
+                    GitVirtualFile file = new GitVirtualFile(project, getBasePath() + "/" + larr[1], convertStatus(larr[0]));
                     files.add(file);
                 }
             }
         }
 
-        //TODO: add user config option for tracking UNVERSIONED files - much slower...
-//        args.clear();
-//        args.add("--others");
-//        output = execute("ls-files", args, true);
-//        if (output != null && output.length() > 0) {
-//            tokenizer = new StringTokenizer(output, line_sep);
-//            while (tokenizer.hasMoreTokens()) {
-//                final String s = tokenizer.nextToken();
-//                GitVirtualFile file = new GitVirtualFile(project, getBasePath() + File.separator + s.trim(), GitVirtualFile.Status.UNVERSIONED);
-//                files.add(file);
-//            }
-//        }
+        return files;
+    }
+
+    /**
+     * Returns a set of all changed Git files not yet cached into the Git index under this VCS root.
+     *
+     * @return The set of all changed files
+     * @throws VcsException If an error occurs
+     */
+    public Set<GitVirtualFile> gitUnCachedFiles() throws VcsException {
+        Set<GitVirtualFile> files = new HashSet<GitVirtualFile>();
+        String output;
+        List<String> args = new ArrayList<String>();
+        args.add("--name-status");
+        args.add("--diff-filter=ADMRUX");
+        args.add("--");
+        output = execute(DIFF_CMD, args, true);
+
+        StringTokenizer tokenizer;
+        if (output != null && output.length() > 0) {
+            if (output.startsWith("null"))
+                output = output.substring(4);
+            tokenizer = new StringTokenizer(output, "\n");
+            while (tokenizer.hasMoreTokens()) {
+                final String s = tokenizer.nextToken();
+                String[] larr = s.split("\t");
+                if (larr.length == 2) {
+                    GitVirtualFile file = new GitVirtualFile(project, getBasePath() + "/" + larr[1], convertStatus(larr[0]));
+                    files.add(file);
+                }
+            }
+        }
 
         return files;
     }
 
+    /**
+     * Returns a set of all Git-unversioned files under this VCS root.
+     *
+     * @return The set of all changed files
+     * @throws VcsException If an error occurs
+     */
+    public Set<GitVirtualFile> gitOtherFiles() throws VcsException {
+        Set<GitVirtualFile> files = new HashSet<GitVirtualFile>();
+        String output;
+        List<String> args = new ArrayList<String>();
+        args.add("--others");
+        args.add("--");
+        output = execute(STATUS_CMD, args, true);
+        if (output != null && output.length() > 0) {
+            StringTokenizer tokenizer = new StringTokenizer(output, line_sep);
+            while (tokenizer.hasMoreTokens()) {
+                final String s = tokenizer.nextToken();
+                GitVirtualFile file = new GitVirtualFile(project, getBasePath() + "/" + s.trim(), GitVirtualFile.Status.UNVERSIONED);
+                files.add(file);
+            }
+        }
+
+        return files;
+    }
 
     /**
      * Loads the specified revision of a file from Git.
@@ -821,8 +859,12 @@ public class GitCommand {
         File gitExec = new File(settings.GIT_EXECUTABLE);
         if (gitExec.exists()) {  // use absolute path if we can
             String sep = System.getProperty("file.separator", "\\");
-            wishcmd = gitExec.getParent() + sep + "wish84";
             gitkcmd = gitExec.getParent() + sep + "gitk";
+            String wishExe = settings.GIT_EXECUTABLE.endsWith(".exe") ? "wish84.exe" : "wish84";
+            wishcmd = gitExec.getParent() + sep + wishExe;
+            File wc = new File(wishcmd);
+            if(!wc.exists()) // sometimes wish isn't where git is...
+                wishcmd = "wish";
         } else {    // otherwise, assume user has $PATH setup
             wishcmd = "wish84";
             gitkcmd = "gitk";
