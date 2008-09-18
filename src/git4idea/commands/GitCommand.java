@@ -1138,7 +1138,7 @@ public class GitCommand {
 
         File directory = VfsUtil.virtualToIoFile(vcsRoot);
 
-        String cmdStr;
+        String cmdStr=null;
         if (DEBUG) {
             cmdStr = StringUtil.join(cmdLine, " ");
             GitVcs.getInstance(project).showMessages("DEBUG: work-dir: [" + directory.getAbsolutePath() + "]" +
