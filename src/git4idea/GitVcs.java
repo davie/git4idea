@@ -216,7 +216,7 @@ public class GitVcs extends AbstractVcs implements Disposable {
         VirtualFileManager.getInstance().addVirtualFileListener(gitFileAdapter, activationDisposable);
         LocalFileSystem.getInstance().registerAuxiliaryFileOperationsHandler(gitFileAdapter);
         RefactoringListenerManager.getInstance(myProject).addListenerProvider(renameListenerProvider);
-//        GitChangeMonitor mon = GitChangeMonitor.getInstance(settings.GIT_INTERVAL);
+//        GitChangeMonitor mon = GitChangeMonitor.getInstance();
 //        mon.setProject(myProject);
 //        mon.setGitVcsSettings(settings);
 //        mon.start();

@@ -13,6 +13,7 @@ package git4idea;
  * Authors: Mark Scott
  */
 
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.RuntimeInterruptedException;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ProjectRootManager;
@@ -22,13 +23,14 @@ import com.intellij.openapi.vcs.changes.Change;
 import com.intellij.openapi.vcs.changes.ChangelistBuilder;
 import com.intellij.openapi.vcs.changes.ContentRevision;
 import com.intellij.openapi.vcs.changes.CurrentContentRevision;
+import com.intellij.openapi.vcs.changes.ChangeListManager;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.vcsUtil.VcsUtil;
 import git4idea.commands.GitCommand;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.Collection;
 import java.util.Date;
+import java.util.Set;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -37,7 +39,7 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public class GitChangeMonitor extends Thread {
     private boolean running = false;
-    public static int DEF_INTERVAL_SECS = 5;
+    public static int DEF_INTERVAL_SECS = 30;
     private long interval = DEF_INTERVAL_SECS * 1000L;
     private static GitChangeMonitor monitor = null;
     private GitVcsSettings settings;
@@ -136,26 +138,40 @@ public class GitChangeMonitor extends Thread {
     private void check() {
         threadLock.lock();
         try {
-            VirtualFile[] roots = ProjectRootManager.getInstance(project).getContentRoots();
-            for (VirtualFile root : roots) {
+            final VirtualFile[][] roots = new VirtualFile[1][];
+            ApplicationManager.getApplication().runReadAction(
+                        new Runnable() {
+                            public void run() {
+                                    roots[0] = ProjectRootManager.getInstance(project).getContentRoots();
+                            }
+                        });
+
+            for (VirtualFile root : roots[0]) {
                 if (root == null) continue;
-                GitCommand cmd = new GitCommand(project, settings, root);
+                if (builder == null) return;
+                final GitCommand cmd = new GitCommand(project, settings, root);
                 try {
-                    if (builder == null) return;
-                    processChanges(cmd.gitUnCachedFiles(), builder);
-                    processChanges(cmd.gitOtherFiles(), builder);
-                } catch (VcsException e) {
+                final Set<GitVirtualFile> uncached = cmd.gitUnCachedFiles();
+                final Set<GitVirtualFile> others = cmd.gitOtherFiles();
+                ApplicationManager.getApplication().invokeLater(
+                        new Runnable() {
+                            public void run() {
+                                    processChanges(uncached);
+                                    processChanges(others);
+                                    ChangeListManager.getInstance(project).scheduleUpdate(true);
+                            }
+                        });
+                } catch(VcsException e) {
                     e.printStackTrace();
                 }
             }
         } finally {
             threadLock.unlock();
         }
-
     }
 
-    private void processChanges(Collection<GitVirtualFile> files, @NotNull ChangelistBuilder builder) {
-        if (files == null || files.size() == 0) return;
+    private void processChanges(Collection<GitVirtualFile> files) {
+        if (files == null || files.size() == 0 || builder == null) return;
         for (GitVirtualFile file : files) {
             if (file == null) continue;
             ContentRevision beforeRev = new GitContentRevision(file, new GitRevisionNumber(GitRevisionNumber.TIP, new Date(file.getModificationStamp())), project);

@@ -863,7 +863,7 @@ public class GitCommand {
             String wishExe = settings.GIT_EXECUTABLE.endsWith(".exe") ? "wish84.exe" : "wish84";
             wishcmd = gitExec.getParent() + sep + wishExe;
             File wc = new File(wishcmd);
-            if(!wc.exists()) // sometimes wish isn't where git is...
+            if (!wc.exists()) // sometimes wish isn't where git is...
                 wishcmd = "wish";
         } else {    // otherwise, assume user has $PATH setup
             wishcmd = "wish84";
@@ -883,14 +883,28 @@ public class GitCommand {
             pb.directory(directory);
             pb.redirectErrorStream(true);
 
-            proc = pb.start();
-            proc.waitFor();
+            if (DEBUG) {
+                String[] cmdLine = new String[]{wishcmd, gitkcmd, filename};
+                String cmdStr = StringUtil.join(cmdLine, " ");
+                GitVcs.getInstance(project).showMessages("DEBUG: work-dir: [" + directory.getAbsolutePath() + "]" +
+                        " exec: [" + cmdStr + "]");
+            }
+
+            proc = pb.start();     // we're not waiting for the process, let IDEA continue
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {  // let it fire up, don't care if we get interrupted
+            }
         } catch (Exception e) {
             throw new VcsException(e);
         }
 
-        if (proc.exitValue() != 0)
-            throw new VcsException("Error executing gitk!");
+        try {
+            if (proc.exitValue() != 0)
+                throw new VcsException("Error executing gitk!");
+        }catch(IllegalThreadStateException ie) {
+            // ignore if we get this since it means it just hasn't terminated yet... probably working!
+        }
     }
 
     /**
@@ -912,7 +926,6 @@ public class GitCommand {
         BufferedReader in = new BufferedReader(new StringReader(cmdOutput));
         SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z");
         String Line;
-        int lineCount = 0;
         try {
             while ((Line = in.readLine()) != null) {
                 String annValues[] = Line.split("\t", 4);
@@ -924,7 +937,6 @@ public class GitCommand {
                 String user = annValues[1];
                 String dateStr = annValues[2];
                 String numberedLine = annValues[3];
-                lineCount++;
 
                 if (revision.length() != 40) {
                     throw new VcsException("Framing error: Illegal revision number: " + revision);
@@ -933,7 +945,6 @@ public class GitCommand {
                 int idx = numberedLine.indexOf(')');
                 if (!user.startsWith("(") || idx <= 0) {
                     continue;
-                    //throw new VcsException("Framing error: unexpected format");
                 }
                 user = user.substring(1).trim(); // Ditch the (
                 Long lineNumber = Long.valueOf(numberedLine.substring(0, idx));
@@ -1127,7 +1138,7 @@ public class GitCommand {
 
         File directory = VfsUtil.virtualToIoFile(vcsRoot);
 
-        String cmdStr = null;
+        String cmdStr;
         if (DEBUG) {
             cmdStr = StringUtil.join(cmdLine, " ");
             GitVcs.getInstance(project).showMessages("DEBUG: work-dir: [" + directory.getAbsolutePath() + "]" +
@@ -1217,11 +1228,6 @@ public class GitCommand {
             pb.redirectErrorStream(true);
 
             proc = pb.start();
-//            try {
-//                proc.waitFor();
-//            } catch (InterruptedException ie) {
-//            }
-
             return proc.getInputStream();
 
         }

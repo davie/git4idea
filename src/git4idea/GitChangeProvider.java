@@ -22,12 +22,11 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.FileStatus;
 import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vcs.changes.Change;
-import com.intellij.openapi.vcs.changes.ChangeListManager;
 import com.intellij.openapi.vcs.changes.ChangeProvider;
 import com.intellij.openapi.vcs.changes.ChangelistBuilder;
 import com.intellij.openapi.vcs.changes.ContentRevision;
-import com.intellij.openapi.vcs.changes.VcsDirtyScope;
 import com.intellij.openapi.vcs.changes.CurrentContentRevision;
+import com.intellij.openapi.vcs.changes.VcsDirtyScope;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.vcsUtil.VcsUtil;
 import git4idea.commands.GitCommand;
@@ -52,18 +51,15 @@ public class GitChangeProvider implements ChangeProvider {
     @Override
     public void getChanges(VcsDirtyScope dirtyScope, ChangelistBuilder builder, ProgressIndicator progress) throws VcsException {
         Collection<VirtualFile> roots = dirtyScope.getAffectedContentRoots();
-        final ChangeListManager clmgr = ChangeListManager.getInstance(project);
-
         for (VirtualFile root : roots) {
             GitCommand command = new GitCommand(project, settings, root);
-            Set<GitVirtualFile> files = command.gitCachedFiles();
+            final Set<GitVirtualFile> files = command.gitCachedFiles();
             for (GitVirtualFile file : files) {
                 Change c = getChange(file);
-                if(c != null)
+                if (c != null)
                     builder.processChange(c);
             }
         }
-        clmgr.scheduleUpdate(true);
         GitChangeMonitor.getInstance().setBuilder(builder);
     }
 
@@ -72,15 +68,14 @@ public class GitChangeProvider implements ChangeProvider {
         return false;
     }
 
-    private Change getChange(VirtualFile file) {
-        if ( file == null) return null;
-        GitVirtualFile gvFile = (GitVirtualFile) file;
-        ContentRevision beforeRev = new GitContentRevision(gvFile, new GitRevisionNumber(
-                GitRevisionNumber.TIP, new Date(gvFile.getModificationStamp())), project);
+    private Change getChange(GitVirtualFile file) {
+        if (file == null) return null;
+        ContentRevision beforeRev = new GitContentRevision(file, new GitRevisionNumber(
+                GitRevisionNumber.TIP, new Date(file.getModificationStamp())), project);
         ContentRevision afterRev = CurrentContentRevision.create(VcsUtil.getFilePath(file.getPath()));
 
         Change c = null;
-        switch (gvFile.getStatus()) {
+        switch (file.getStatus()) {
             case UNMERGED: {
                 c = new Change(beforeRev, afterRev, FileStatus.MERGED_WITH_CONFLICTS);
                 break;
