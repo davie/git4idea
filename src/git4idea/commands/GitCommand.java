@@ -69,7 +69,7 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 @SuppressWarnings({"ResultOfMethodCallIgnored"})
 public class GitCommand {
-    public final static boolean DEBUG = false;
+    public final static boolean DEBUG = true;
     public static final int BUF_SIZE = 16 * 1024;  // 16KB
     public static final int MAX_BUF_ALLOWED = 128 * 1024 * 1024; //128MB (who'll ever need to edit a file that big??? :-)
     public static final String EMPTY_STRING = "";
@@ -345,7 +345,6 @@ public class GitCommand {
      * @param path     The path to the file.
      * @param revision The revision to load. If the revision is null, then HEAD will be loaded.
      * @return The contents of the revision as a String.
-     * @throws VcsException If the load of the file fails.
      */
     public String getContents(@NotNull String path, String revision) {
         StringBuffer revCmd = new StringBuffer();
@@ -858,7 +857,7 @@ public class GitCommand {
         String gitkcmd;
         File gitExec = new File(settings.GIT_EXECUTABLE);
         if (gitExec.exists()) {  // use absolute path if we can
-            String sep = System.getProperty("file.separator", "\\");
+            String sep = System.getProperty("file.separator", "/");
             gitkcmd = gitExec.getParent() + sep + "gitk";
             String wishExe = settings.GIT_EXECUTABLE.endsWith(".exe") ? "wish84.exe" : "wish84";
             wishcmd = gitExec.getParent() + sep + wishExe;
@@ -1189,12 +1188,13 @@ public class GitCommand {
 
             if (wpos == 0) return EMPTY_STRING;
             String output = new String(retBuf, 0, wpos);
-            if (proc.exitValue() != 0)
-                throw new VcsException(output);
 
             // empty repo with no commits yet...
-            if (output != null && cmd.equals(DIFF_CMD) && output.contains("No HEAD commit to compare with"))
+            if (cmd.equals(DIFF_CMD) && output.contains("No HEAD commit to compare with"))
                 return EMPTY_STRING;
+
+            if (proc.exitValue() != 0)
+                throw new VcsException(output);
 
             return output;
         }

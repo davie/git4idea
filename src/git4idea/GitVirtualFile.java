@@ -34,7 +34,7 @@ public class GitVirtualFile extends VirtualFile {
     private final String URL;
     private File file;
     private Status status;
-    private String fileSep = System.getProperty("file.separator", "\\");
+    private String fileSep = System.getProperty("file.separator", "/");
 
 
     public GitVirtualFile(@NotNull Project project, @NotNull String path, @NotNull Status status) {
