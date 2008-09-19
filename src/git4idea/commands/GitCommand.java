@@ -69,7 +69,7 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 @SuppressWarnings({"ResultOfMethodCallIgnored"})
 public class GitCommand {
-    public final static boolean DEBUG = true;
+    public final static boolean DEBUG = false;
     public static final int BUF_SIZE = 16 * 1024;  // 16KB
     public static final int MAX_BUF_ALLOWED = 128 * 1024 * 1024; //128MB (who'll ever need to edit a file that big??? :-)
     public static final String EMPTY_STRING = "";
@@ -101,6 +101,7 @@ public class GitCommand {
     private static final String DIFF_TREE_CMD = "diff-tree";
 
     private static String fileSep = System.getProperty("os.name").startsWith("Windows") ? "\\" : "/";
+    private static String pathSep = System.getProperty("path.separator", ";");
     private final static String line_sep = "\n";
     
     /* Misc Git constants */
@@ -878,7 +879,11 @@ public class GitCommand {
             // copy IDEA configured env into process exec env
             Map<String, String> pbenv = pb.environment();
             pbenv.putAll(EnvironmentUtil.getEnviromentProperties());
+            if(pbenv.get("GIT_DIR") == null)
+                pbenv.put("GIT_DIR", directory.getAbsolutePath() + fileSep + ".git");
+            String PATH = pbenv.get("PATH");    // fix up path so wish can find git when it needs it...
 
+            pbenv.put("PATH", gitExec.getParent() + pathSep + PATH);
             pb.directory(directory);
             pb.redirectErrorStream(true);
 
@@ -1155,6 +1160,8 @@ public class GitCommand {
             // copy IDEA configured env into process exec env
             Map<String, String> pbenv = pb.environment();
             pbenv.putAll(EnvironmentUtil.getEnviromentProperties());
+            if(pbenv.get("GIT_DIR") == null)
+                pbenv.put("GIT_DIR", directory.getAbsolutePath() + fileSep + ".git");
             pb.directory(directory);
             pb.redirectErrorStream(true);
             Process proc = pb.start();
