@@ -16,14 +16,20 @@ package git4idea;
  *
  * This code was originally derived from the MKS & Mercurial IDEA VCS plugins
  */
+
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileSystem;
-import com.intellij.openapi.project.Project;
+import org.apache.log4j.lf5.util.StreamUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.apache.log4j.lf5.util.StreamUtils;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 
 /**
  * Git implementation of VCS virtual file
@@ -34,7 +40,7 @@ public class GitVirtualFile extends VirtualFile {
     private final String URL;
     private File file;
     private Status status;
-    private String fileSep = System.getProperty("file.separator", "/");
+    private static String fileSep = System.getProperty("os.name").startsWith("Windows") ? "\\" : "/";
 
 
     public GitVirtualFile(@NotNull Project project, @NotNull String path, @NotNull Status status) {
@@ -101,7 +107,7 @@ public class GitVirtualFile extends VirtualFile {
     @Nullable
     public VirtualFile getParent() {
         String parent = file.getParent();
-        if(parent == null) return null;
+        if (parent == null) return null;
         return new GitVirtualFile(project, parent);
     }
 
@@ -176,7 +182,7 @@ public class GitVirtualFile extends VirtualFile {
     }
 
     public int hashCode() {
-        if(path == null) return -1;
+        if (path == null) return -1;
         return getUrl().hashCode();
     }
 

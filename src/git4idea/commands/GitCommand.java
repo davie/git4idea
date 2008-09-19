@@ -100,6 +100,9 @@ public class GitCommand {
     public static final String STATUS_CMD = "ls-files";
     private static final String DIFF_TREE_CMD = "diff-tree";
 
+    private static String fileSep = System.getProperty("os.name").startsWith("Windows") ? "\\" : "/";
+    private final static String line_sep = "\n";
+    
     /* Misc Git constants */
     private static final String HEAD = "HEAD";
     private static final Lock gitWriteLock = new ReentrantLock();
@@ -108,8 +111,6 @@ public class GitCommand {
     private Project project;
     private final GitVcsSettings settings;
     private VirtualFile vcsRoot;
-    private final static String line_sep = "\n";
-
     private String cmd;
     private String[] opts;
     private String[] args;
@@ -857,10 +858,9 @@ public class GitCommand {
         String gitkcmd;
         File gitExec = new File(settings.GIT_EXECUTABLE);
         if (gitExec.exists()) {  // use absolute path if we can
-            String sep = System.getProperty("file.separator", "/");
-            gitkcmd = gitExec.getParent() + sep + "gitk";
+            gitkcmd = gitExec.getParent() + fileSep + "gitk";
             String wishExe = settings.GIT_EXECUTABLE.endsWith(".exe") ? "wish84.exe" : "wish84";
-            wishcmd = gitExec.getParent() + sep + wishExe;
+            wishcmd = gitExec.getParent() + fileSep + wishExe;
             File wc = new File(wishcmd);
             if (!wc.exists()) // sometimes wish isn't where git is...
                 wishcmd = "wish";
